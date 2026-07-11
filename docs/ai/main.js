@@ -16,6 +16,7 @@ import { execTool, getToolDefinitions } from './tools/exec.js';
 import './tools/index.js'; // side-effect: registers all tools
 import { buildSystemPrompt } from './system_prompt.js';
 import { beforeSend } from './context_note.js';
+import { runAgentLoop } from './agent.js';
 import { currentState } from '../store.js';
 
 const ADAPTERS = {
@@ -81,40 +82,36 @@ panel.onSend(async (text) => {
     currentState,
     validEmblemNames: Object.values(EMBLEM_CATALOG).flat(),
   };
-
-  const textParts = [];
-  const toolCalls = [];
-  const toolResults = [];
+  const request = {
+    apiKey: s.apiKey,
+    model: s.model,
+    baseUrl: s.baseUrl,
+    tools: getToolDefinitions(),
+    systemPrompt,
+  };
 
   streaming = (async () => {
     currentAbort = new AbortController();
     try {
       panel.setStreaming(true);
-      for await (const ev of adapter.streamChat({
+      await runAgentLoop({
+        adapter,
+        request: { ...request, messages: truncateForRequest(messages) },
+        messages,
+        ctx,
         signal: currentAbort.signal,
-        apiKey: s.apiKey,
-        model: s.model,
-        baseUrl: s.baseUrl,
-        messages: truncateForRequest(messages),
-        tools: getToolDefinitions(),
-        systemPrompt,
-      })) {
-        if (ev.type === 'text') {
-          assistantUpdater(ev.delta);
-          textParts.push(ev.delta);
-        } else if (ev.type === 'tool_call') {
-          panel.appendToolCall({ id: ev.id, name: ev.name, args: ev.args });
-          toolCalls.push({ id: ev.id, type: 'function', function: { name: ev.name, arguments: JSON.stringify(ev.args) } });
-          const result = await execTool(ev.name, ev.args, ctx);
-          if (!result.ok) panel.markToolCallError(ev.id, result.error);
-          toolResults.push({ role: 'tool', tool_call_id: ev.id, content: JSON.stringify(result) });
-        } else if (ev.type === 'error') {
-          panel.showError(`Provider error: ${ev.error?.message ?? 'unknown'}`);
-        }
-      }
-      const assistantMsg = { role: 'assistant', content: textParts.join('') };
-      if (toolCalls.length) assistantMsg.tool_calls = toolCalls;
-      messages.push(assistantMsg, ...toolResults);
+        onEvent: (ev) => {
+          if (ev.type === 'text') {
+            assistantUpdater(ev.delta);
+          } else if (ev.type === 'tool_call') {
+            panel.appendToolCall({ id: ev.id, name: ev.name, args: ev.args });
+          } else if (ev.type === 'tool_result') {
+            if (!ev.result.ok) panel.markToolCallError(ev.id, ev.result.error);
+          } else if (ev.type === 'error') {
+            panel.showError(`Provider error: ${ev.error?.message ?? 'unknown'}`);
+          }
+        },
+      });
       saveConversation(messages);
       lastAiTurnSnapshot = currentState();
     } catch (err) {
