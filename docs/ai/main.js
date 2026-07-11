@@ -109,6 +109,13 @@ panel.onSend(async (text) => {
             if (!ev.result.ok) panel.markToolCallError(ev.id, ev.result.error);
           } else if (ev.type === 'error') {
             panel.showError(`Provider error: ${ev.error?.message ?? 'unknown'}`);
+          } else if (ev.type === 'retrying') {
+            panel.showInfo?.(ev.message);
+            // Many panels don't have showInfo; fall back to a transient error
+            // chip so the user sees *something* during the wait. Don't treat
+            // it as a hard error.
+          } else if (ev.type === 'turn_failed') {
+            panel.showError(`Request failed: ${ev.error?.message ?? 'unknown'}`);
           }
         },
       });

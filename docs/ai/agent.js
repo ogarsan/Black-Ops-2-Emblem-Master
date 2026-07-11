@@ -6,12 +6,30 @@
 //   - a turn emits no tool_calls (model's final answer)
 //   - maxDepth is reached (safety against runaway loops)
 //
+// Retryable errors (e.g. Gemini 429 rate-limit, marked by adapters via
+// `ev.error.retryable === true`) trigger exponential backoff and a re-send
+// of the same turn. Non-retryable errors abort the turn cleanly without
+// polluting the message history with an empty assistant entry.
+//
 // Extracted from main.js so it's pure logic and unit-testable with a scripted
 // adapter (no DOM, no network).
 
 import { execTool } from './tools/exec.js';
 
 const DEFAULT_MAX_DEPTH = 10;
+const DEFAULT_MAX_RETRIES = 3;
+const MAX_BACKOFF_MS = 30_000;
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    if (signal) {
+      const onAbort = () => { clearTimeout(t); reject(new Error('aborted')); };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
 
 /**
  * Drive a multi-turn tool-calling loop against `adapter`.
@@ -24,10 +42,11 @@ const DEFAULT_MAX_DEPTH = 10;
  * @param {Array}    opts.messages       — OpenAI-format message history (mutated in place)
  * @param {object}   opts.ctx            — ctx passed to tool handlers
  * @param {Function} [opts.execTool]     — dispatcher (defaults to ./tools/exec.js)
- * @param {Function} opts.onEvent        — receives { type:'text'|'tool_call'|'tool_result'|'done'|'error', ... }
+ * @param {Function} opts.onEvent        — receives { type:'text'|'tool_call'|'tool_result'|'done'|'error'|'retrying', ... }
  * @param {number}   [opts.maxDepth=10]
+ * @param {number}   [opts.maxRetries=3] — per-turn retries on retryable errors (e.g. 429)
  * @param {AbortSignal} [opts.signal]
- * @returns {Promise<{ messages: Array, turns: number }>}
+ * @returns {Promise<{ messages: Array, turns: number, aborted?: boolean }>}
  */
 export async function runAgentLoop({
   adapter,
@@ -37,6 +56,7 @@ export async function runAgentLoop({
   execTool: dispatch = execTool,
   onEvent = () => {},
   maxDepth = DEFAULT_MAX_DEPTH,
+  maxRetries = DEFAULT_MAX_RETRIES,
   signal,
 }) {
   const tool = dispatch;
@@ -48,47 +68,97 @@ export async function runAgentLoop({
     const textParts = [];
     const toolCalls = [];
     const toolResults = [];
+    let sawError = false;
+    let finalError = null;
 
-    for await (const ev of adapter.streamChat({
-      ...request,
-      signal,
-      messages,
-    })) {
-      if (ev.type === 'text') {
-        textParts.push(ev.delta);
-        onEvent({ type: 'text', delta: ev.delta });
-      } else if (ev.type === 'tool_call') {
-        toolCalls.push({
-          id: ev.id,
-          type: 'function',
-          function: { name: ev.name, arguments: JSON.stringify(ev.args ?? {}) },
-          // Provider-specific metadata (e.g. Gemini's thoughtSignature) must
-          // round-trip back to the provider on the next request. Adapters that
-          // emit it include it on the tool_call event; we store it here and
-          // the adapter reads it back when re-serializing.
-          ...(ev.thoughtSignature ? { thoughtSignature: ev.thoughtSignature } : {}),
-        });
-        onEvent({ type: 'tool_call', id: ev.id, name: ev.name, args: ev.args });
-        const result = await tool(ev.name, ev.args ?? {}, ctx);
-        onEvent({ type: 'tool_result', id: ev.id, name: ev.name, result });
-        toolResults.push({
-          role: 'tool',
-          tool_call_id: ev.id,
-          content: JSON.stringify(result),
-        });
-      } else if (ev.type === 'error') {
-        onEvent({ type: 'error', error: ev.error });
-      } else if (ev.type === 'done') {
-        onEvent({ type: 'done' });
+    // Per-turn retry loop: a 429 from the provider triggers exponential
+    // backoff (2s, 4s, 8s, capped at MAX_BACKOFF_MS) and re-sends the same
+    // request. Other errors are surfaced immediately and the turn ends.
+    let attempt = 0;
+    retryTurn: while (true) {
+      sawError = false;
+      finalError = null;
+      textParts.length = 0;
+      toolCalls.length = 0;
+      toolResults.length = 0;
+
+      for await (const ev of adapter.streamChat({
+        ...request,
+        signal,
+        messages,
+      })) {
+        if (ev.type === 'text') {
+          textParts.push(ev.delta);
+          onEvent({ type: 'text', delta: ev.delta });
+        } else if (ev.type === 'tool_call') {
+          toolCalls.push({
+            id: ev.id,
+            type: 'function',
+            function: { name: ev.name, arguments: JSON.stringify(ev.args ?? {}) },
+            // Provider-specific metadata (e.g. Gemini's thoughtSignature) must
+            // round-trip back to the provider on the next request. Adapters that
+            // emit it include it on the tool_call event; we store it here and
+            // the adapter reads it back when re-serializing.
+            ...(ev.thoughtSignature ? { thoughtSignature: ev.thoughtSignature } : {}),
+          });
+          onEvent({ type: 'tool_call', id: ev.id, name: ev.name, args: ev.args });
+          const result = await tool(ev.name, ev.args ?? {}, ctx);
+          onEvent({ type: 'tool_result', id: ev.id, name: ev.name, result });
+          toolResults.push({
+            role: 'tool',
+            tool_call_id: ev.id,
+            content: JSON.stringify(result),
+          });
+        } else if (ev.type === 'error') {
+          sawError = true;
+          finalError = ev.error;
+          onEvent({ type: 'error', error: ev.error });
+          if (ev.error?.retryable && attempt < maxRetries) {
+            // Retryable — wait with exponential backoff and re-emit the
+            // stream. Any partial events already yielded above are discarded
+            // (in practice the adapter errors out before any payload events
+            // for 429s, so this is safe).
+            attempt += 1;
+            const delay = Math.min(2 ** attempt, MAX_BACKOFF_MS / 1000) * 1000;
+            onEvent({
+              type: 'retrying',
+              attempt,
+              maxRetries,
+              delayMs: delay,
+              message: `Rate limited — retrying in ${delay / 1000}s (attempt ${attempt}/${maxRetries})…`,
+            });
+            try {
+              await sleep(delay, signal);
+            } catch {
+              // aborted during wait
+              messages.push({ role: 'assistant', content: textParts.join('') });
+              return { messages, turns, aborted: true };
+            }
+            continue retryTurn;
+          }
+          break; // non-retryable: end the turn
+        } else if (ev.type === 'done') {
+          onEvent({ type: 'done' });
+        }
       }
+
+      // Stream finished (cleanly or after a non-retryable error). Break out
+      // of the retry loop; either persist the turn or skip it below.
+      break;
     }
 
-    // Persist the assistant turn + tool results into the conversation.
-    const assistantMsg = { role: 'assistant', content: textParts.join('') };
-    if (toolCalls.length) assistantMsg.tool_calls = toolCalls;
-    messages.push(assistantMsg, ...toolResults);
+    // Persist the assistant turn + tool results. Skip an empty assistant
+    // entry on error so a failed stream doesn't leave a ghost message.
+    if (sawError && textParts.length === 0 && toolCalls.length === 0) {
+      onEvent({ type: 'turn_failed', error: finalError });
+    } else {
+      const assistantMsg = { role: 'assistant', content: textParts.join('') };
+      if (toolCalls.length) assistantMsg.tool_calls = toolCalls;
+      messages.push(assistantMsg, ...toolResults);
+    }
 
-    // If the turn had no tool_calls, the model is done — return.
+    // If the turn had no tool_calls (and didn't retry to a successful turn),
+    // the model is done — return.
     if (toolCalls.length === 0) return { messages, turns };
   }
 

@@ -51,7 +51,21 @@ export class GeminiAdapter extends AiAdapter {
       return;
     }
     if (!res.ok) {
-      yield { type: 'error', error: Object.assign(new Error(`Gemini ${res.status}`), { status: res.status }) };
+      // Give the agent loop enough info to (a) recognise rate-limits and
+      // auto-retry with backoff, and (b) show a human-readable message.
+      const status = res.status;
+      let bodyText = '';
+      try { bodyText = (await res.text()).slice(0, 500); } catch { /* ignore */ }
+      const hint = status === 429
+        ? 'rate limit hit — free tier allows ~5-15 requests per minute, wait or upgrade in AI Studio'
+        : status === 401 || status === 403
+          ? 'API key invalid or missing billing/quota'
+          : status === 404
+            ? `model '${model}' not found or not available to this key`
+            : '';
+      const msg = `Gemini ${status}${hint ? ` (${hint})` : ''}`;
+      const err = Object.assign(new Error(msg), { status, provider: 'gemini', retryable: status === 429 });
+      yield { type: 'error', error: err };
       return;
     }
     if (!res.body) {

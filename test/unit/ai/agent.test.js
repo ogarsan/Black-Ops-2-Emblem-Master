@@ -80,4 +80,64 @@ describe('runAgentLoop', () => {
     expect(final.turns).toBe(5);
     expect(execTool).toHaveBeenCalledTimes(5);
   });
+
+  it('retries a retryable error (e.g. Gemini 429) with exponential backoff and then succeeds', async () => {
+    const execTool = vi.fn(async () => ({ ok: true, result: { layers_used: 0 } }));
+    // First streamChat call → retryable 429; second call → real text.
+    let i = 0;
+    const adapter = {
+      async *streamChat(_opts) {
+        i += 1;
+        if (i === 1) {
+          const err = Object.assign(new Error('Gemini 429'), { status: 429, retryable: true });
+          yield { type: 'error', error: err };
+          return;
+        }
+        yield { type: 'text', delta: 'Hi' };
+        yield { type: 'done' };
+      },
+    };
+    const events = [];
+    const messages = [{ role: 'user', content: 'hello' }];
+    const final = await runAgentLoop({
+      adapter,
+      request: { apiKey: 'k', model: 'm', baseUrl: '', tools: [], systemPrompt: 's' },
+      messages,
+      ctx: {},
+      execTool,
+      onEvent: (e) => events.push(e),
+      maxRetries: 3,
+      // Skip the actual sleep in tests by giving a fake delay via a tiny cap.
+    });
+    // We should have hit the adapter twice (first 429, then success).
+    expect(i).toBe(2);
+    // And a 'retrying' event was emitted before the successful retry.
+    expect(events.find((e) => e.type === 'retrying')).toBeTruthy();
+    // The final assistant message should be the text from the successful retry,
+    // NOT an empty message from the failed first attempt.
+    expect(final.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'Hi' });
+    expect(execTool).not.toHaveBeenCalled();
+  });
+
+  it('skips an empty assistant entry when a non-retryable error ends the turn', async () => {
+    const adapter = {
+      async *streamChat(_opts) {
+        const err = Object.assign(new Error('Bad key'), { status: 401, retryable: false });
+        yield { type: 'error', error: err };
+      },
+    };
+    const messages = [{ role: 'user', content: 'hi' }];
+    const events = [];
+    const final = await runAgentLoop({
+      adapter,
+      request: { apiKey: 'k', model: 'm', baseUrl: '', tools: [], systemPrompt: 's' },
+      messages,
+      ctx: {},
+      onEvent: (e) => events.push(e),
+    });
+    // No ghost assistant message from the failed stream.
+    expect(final.messages.map((m) => m.role)).toEqual(['user']);
+    // The 'turn_failed' event signals main.js that the turn didn't produce content.
+    expect(events.find((e) => e.type === 'turn_failed')).toBeTruthy();
+  });
 });
