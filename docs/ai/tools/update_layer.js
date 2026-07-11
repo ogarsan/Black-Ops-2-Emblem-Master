@@ -32,7 +32,13 @@ export function registerUpdateLayer() {
       const { position, ...patch } = args;
       if ('rotate' in patch) patch.rotate = ((patch.rotate % 360) + 360) % 360;
       Object.assign(cur, patch);
+      // Repaint the layer's own canvas + update its SVG color filter so the
+      // main canvas and bottom-strip preview reflect the new properties.
+      ctx.editor.stacki = idx;
+      ctx.editor.generatestackcanvas?.();
+      ctx.editor.createfilter?.(cur.hue, cur.saturation, cur.brightness, cur.alpha);
       ctx.editor.draw?.();
+      ctx.editor.getusedlayers?.();
       window.updateimgs?.();
       ctx.history?.snapshot?.(ctx.currentState?.());
       return { updated: position, fields: Object.keys(patch) };
