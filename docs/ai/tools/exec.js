@@ -44,16 +44,19 @@ export function getToolDefinitions() {
 
 export async function execTool(name, args, ctx) {
   const tool = registry.get(name);
-  if (!tool) return { ok: false, error: `unknown tool: ${name}` };
+  if (!tool) {
+    console.log('[bo2-tool] unknown', { name, args });
+    return { ok: false, error: `unknown tool: ${name}` };
+  }
+  console.log('[bo2-tool] call', { name, args });
 
   const parsed = tool.schema.safeParse(args);
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues
-        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-        .join('; '),
-    };
+    const error = parsed.error.issues
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; ');
+    console.log('[bo2-tool] validation_failed', { name, args, error });
+    return { ok: false, error };
   }
 
   try {
@@ -62,11 +65,16 @@ export async function execTool(name, args, ctx) {
     // so the model receives a tool_result error and self-corrects. Treat that
     // as ok:false so the surrounding loop knows to feed the error back.
     if (result && typeof result === 'object' && 'error' in result) {
-      return { ok: false, error: String(result.error) };
+      const error = String(result.error);
+      console.log('[bo2-tool] domain_error', { name, args, error });
+      return { ok: false, error };
     }
+    console.log('[bo2-tool] ok', { name, args, result });
     return { ok: true, result };
   } catch (err) {
-    return { ok: false, error: err?.message ?? String(err) };
+    const error = err?.message ?? String(err);
+    console.log('[bo2-tool] thrown', { name, args, error });
+    return { ok: false, error };
   }
 }
 
