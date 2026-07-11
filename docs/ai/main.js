@@ -31,6 +31,7 @@ import { OpenAiCompatAdapter } from './adapters/openai_compat.js';
 import { execTool, getToolDefinitions } from './tools/exec.js';
 import './tools/index.js'; // side-effect: registers all tools on import
 import { buildSystemPrompt } from './system_prompt.js';
+import { beforeSend } from './context_note.js';
 import { currentState } from '../store.js';
 
 const ADAPTERS = {
@@ -57,6 +58,7 @@ if (aiTab) {
 
   let messages = initialConversation.slice();
   let streaming = null;
+  let lastAiTurnSnapshot = null;
 
   // Settings / New chat hooks: re-read or wipe state, then re-render.
   aiTab.addEventListener('bo2:settings', () => {
@@ -86,7 +88,11 @@ if (aiTab) {
     messages.push({ role: 'user', content: text });
 
     const assistantUpdater = panel.appendAssistant();
-    const systemPrompt = buildSystemPrompt();
+    const note = beforeSend({
+      lastAiTurnSnapshot,
+      currentSnapshot: currentState(),
+    });
+    const systemPrompt = buildSystemPrompt({ extra: note ?? '' });
     const adapter = getAdapter(s.provider);
     const ctx = {
       editor: window.editor,
@@ -143,6 +149,9 @@ if (aiTab) {
         if (toolCalls.length) assistantMsg.tool_calls = toolCalls;
         messages.push(assistantMsg, ...toolResults);
         saveConversation(messages);
+        // Snapshot the editor state at end of this turn so the next turn's
+        // context note can diff against it.
+        lastAiTurnSnapshot = currentState();
         // Avoid unused-var warnings on `saveSettings` (it's exposed for future UI).
         void saveSettings;
       } catch (err) {
