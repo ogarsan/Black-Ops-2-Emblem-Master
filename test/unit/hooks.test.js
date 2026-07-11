@@ -56,3 +56,11 @@ describe('hooks.js wiring', () => {
     expect(window.editor.stack.length).toBe(before + 1);
   });
 });
+
+describe('Undo/Redo UI surface', () => {
+  it('exposes canUndo/canRedo as booleans via window.__bo2History', async () => {
+    await import('../../docs/hooks.js');
+    expect(typeof window.__bo2History.canUndo()).toBe('boolean');
+    expect(typeof window.__bo2History.canRedo()).toBe('boolean');
+  });
+});

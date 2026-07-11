@@ -1,0 +1,26 @@
+/* docs/css/ai.css
+ *
+ * Styles for the AI tab and shared undo/redo UI. The undo buttons live in the
+ * editor prompt area (alongside the existing "ESC Back" / "ENTER Confirm"
+ * controls) so the user sees them no matter which picker tab is active.
+ *
+ * Other AI-tab UI (chat bubbles, tool chips, settings modal) lands here as
+ * Tasks 11–30 bring it online.
+ */
+
+.bo2-undo-counter {
+  font-size: 18px;
+  color: #ccc;
+  margin-left: 8px;
+}
+
+.bo2-undo-btn {
+  cursor: pointer;
+  user-select: none;
+  opacity: 1;
+}
+
+.bo2-undo-btn[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
