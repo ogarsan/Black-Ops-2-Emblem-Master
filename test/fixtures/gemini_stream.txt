@@ -1,0 +1,3 @@
+{"candidates":[{"content":{"parts":[{"text":"Hello"}],"role":"model"}}]}
+{"candidates":[{"content":{"parts":[{"text":" world"}],"role":"model"}}]}
+{"candidates":[{"content":{"parts":[{"functionCall":{"name":"add_layer","args":{"name":"Letter A","position":1}}}],"role":"model"},"finishReason":"STOP"}]}
