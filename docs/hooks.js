@@ -1,23 +1,16 @@
 // docs/hooks.js
 //
-// Wires docs/history.js to the live editor. Entrypoint script (no exports).
+// Emblem-level undo/redo wired to the live editor. Entrypoint script (no exports).
 //
-// The upstream editor is imperative and emits no events, AND it captured
-// `document.onkeypress = self.keyfuncs` BY REFERENCE at construction
-// (editor.js:347) — so wrapping editor methods would not intercept keyboard
-// edits. Instead we record commits on the trailing edge of interactions
-// (keyup / mouseup / debounced wheel), DEDUPED by serialized state so that
-// no-op interactions (selecting a layer, navigation keys, hovers that changed
-// nothing) never create spurious snapshots. That dedupe is what makes one
-// Ctrl+Z equal one atomic action.
+// Model: after each committed step we snapshot the WHOLE emblem (all 32 slots,
+// positions preserved) via store.currentState(). Restore rebuilds the emblem with
+// the editor's OWN load-path machinery so it comes back exactly, stays in the
+// editor, and highlights the changed layer. The in-layer "U" button
+// (editor.stackbackup) is separate and untouched.
 //
-// Upstream calls the global `loadedall()` after all 261 emblem PNGs decode
-// (and after any `?load=…` is applied), so wrapping it gives us a race-free
-// place to seed the baseline snapshot.
-//
-// Re-entrancy: `__bo2ApplyState` mutates `editor.stack` and calls
-// `editor.draw()` etc., which would trip the capture listeners. An
-// `isRestoring` flag suspends capture during restore.
+// Capture funnels through one deduped commit(): a snapshot is taken only if the
+// serialized state changed, so no-op interactions never create steps and each
+// Ctrl+Z advances exactly one real change.
 
 import { createHistory } from './history.js';
 import { currentState } from './store.js';
@@ -30,6 +23,13 @@ if (canvas) {
   let isRestoring = false;
   let lastJson = null;
 
+  // Guard: undo/redo only act when the editor is open. While the user is on the
+  // playercard screen we let native undo work in the name/clan fields.
+  const editorVisible = () => {
+    const el = document.getElementById('editor');
+    return !!el && el.style.visibility === 'visible';
+  };
+
   // Single source of truth for recording a commit; deduped by serialized state.
   const commit = () => {
     if (isRestoring || !window.editor) return;
@@ -41,18 +41,10 @@ if (canvas) {
   };
   window.__bo2Commit = commit;
 
-  // Deterministic baseline: wrap the global `loadedall()` so the first
-  // snapshot is recorded exactly once, right after upstream finished setting
-  // up the editor and applying any `?load=…` from the URL.
-  //
-  // The wrap is the primary path; we ALSO poll briefly because upstream's
-  // loadedall may already have fired before this deferred module evaluated,
-  // OR it may fire after a race window where a user action could otherwise
-  // sneak in before the baseline exists.
+  // Deterministic baseline: upstream calls the global loadedall() after all
+  // images decode and after any `?load=` is applied — race-free hook, seeded once.
   let seeded = false;
   const seedBaseline = () => {
-    // Editor must exist AND its icon map must be populated. The icon map fills
-    // as each emblem PNG decodes; populated = upstream finished loadedall().
     if (seeded || !window.editor) return false;
     if (!window.editor.icons || Object.keys(window.editor.icons).length === 0) return false;
     seeded = true;
@@ -66,9 +58,8 @@ if (canvas) {
     seedBaseline();
     return r;
   };
-  // Try immediately + poll until window.editor is set (it's created inside
-  // main.js's window.onload, which fires after 261 emblem PNGs decode —
-  // possibly AFTER our deferred module ran).
+  // Try immediately + poll briefly because upstream's loadedall may already have
+  // fired before this deferred module evaluated.
   if (!seedBaseline()) {
     let attempts = 0;
     const tick = () => {
@@ -78,49 +69,68 @@ if (canvas) {
     setTimeout(tick, 50);
   }
 
-  // Commit on the trailing edge of interactions. keyup fires AFTER the editor's
-  // onkeypress/onkeydown mutated state; mouseup covers canvas drags AND picker
-  // clicks; wheel (debounced) covers fixed-scale zoom. commit()'s dedupe drops
-  // the no-ops.
+  // Commit on the trailing edge of interactions; dedupe drops no-ops.
   document.addEventListener('keyup', commit);
   document.addEventListener('mouseup', commit);
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#editor')) commit();
+  });
   let wheelTimer = null;
   window.addEventListener('wheel', () => {
     if (wheelTimer) clearTimeout(wheelTimer);
     wheelTimer = setTimeout(() => { wheelTimer = null; commit(); }, 250);
   }, { passive: true });
 
-  // Restore a stripped snapshot onto the live editor. isRestoring suppresses
-  // the capture listeners that the restore's own draw()/DOM writes would trip.
+  // Faithful restore: rebuild every slot the way editor.loaddata does per layer,
+  // over the full 32-slot snapshot (handling nulls). Never touches editor/
+  // playercard visibility; lands in the general view; highlights the changed layer.
   window.__bo2ApplyState = (state) => {
-    if (!state || !window.editor) return;
+    const ed = window.editor;
+    if (!state || !ed) return;
+    if (!editorVisible()) return; // guard: don't restore from the playercard screen
+
+    const prev = currentState();
     isRestoring = true;
     try {
       const incoming = Array.isArray(state.stack) ? state.stack : [];
-      window.editor.stack = incoming.map((l) => (l ? rebuildLayer(l) : null));
-      if (typeof state.stacki === 'number') window.editor.stacki = state.stacki;
-      if (state.details && window.details) Object.assign(window.details, state.details);
-
-      // Reset all 32 previews + filters, then repopulate slots that have a layer
-      // (matches what upstream's `loaddata` does).
       for (let i = 0; i < 32; i++) {
+        const snap = incoming[i] || null;
         const imgEl = document.getElementById(`layer-img-${i}`);
-        if (imgEl) imgEl.src = 'img/empty.png';
         const matrixEl = document.getElementById(`matrix-${i}`);
-        if (matrixEl) matrixEl.setAttribute('values', '1 0 0 0 0\n0 1 0 0 0\n0 0 1 0 0\n0 0 0 1 0');
-      }
-      for (let i = 0; i < window.editor.stack.length; i++) {
-        const L = window.editor.stack[i];
-        if (!L) continue;
-        const imgEl = document.getElementById(`layer-img-${i}`);
-        if (imgEl && L.img && L.img.src) imgEl.src = L.img.src;
-        window.editor.createfilter?.(L.hue, L.saturation, L.brightness, L.alpha);
+        if (!snap) {
+          ed.stack[i] = null;
+          if (imgEl) imgEl.src = 'img/empty.png';
+          if (matrixEl) matrixEl.setAttribute('values', '1 0 0 0 0\n0 1 0 0 0\n0 0 1 0 0\n0 0 0 1 0');
+          continue;
+        }
+        // Rebuild exactly like editor.loaddata's per-layer loop:
+        ed.stack[i] = { ...snap, img: ed.icons?.[snap.name] };
+        ed.stacki = i;                 // so generatestackcanvas + createfilter target slot i
+        ed.generatestackcanvas?.();    // paints the layer canvas via alterstackcanvas
+        ed.createfilter?.(snap.hue, snap.saturation, snap.brightness, snap.alpha); // → matrix-i
+        if (imgEl && ed.stack[i].img && ed.stack[i].img.src) imgEl.src = ed.stack[i].img.src;
       }
 
-      window.editor.draw?.();
-      window.editor.getusedlayers?.();
+      // Restore playercard details.
+      if (state.details && window.details) {
+        Object.assign(window.details, state.details);
+        const nameEl = document.getElementById('playername');
+        const clanEl = document.getElementById('playerclantag');
+        const bgEl = document.getElementById('playercard-bg');
+        if (nameEl) nameEl.innerText = state.details.playername ?? '';
+        if (clanEl) clanEl.innerText = state.details.playerclantag ?? '';
+        if (bgEl && state.details.playerbg != null && state.details.playerbg !== '') bgEl.src = state.details.playerbg;
+      }
+
+      // Land in the general layers view (never the playercard) + highlight the change.
+      const target = changedIndex(prev, state);
+      ed.changemode?.('main');
+      ed.changestacki?.(target);
+
+      ed.draw?.();
+      ed.getusedlayers?.();
       window.updateimgs?.();
-      lastJson = JSON.stringify(state); // keep dedupe ref in sync with live state
+      lastJson = JSON.stringify(state);
     } finally {
       isRestoring = false;
     }
@@ -128,6 +138,7 @@ if (canvas) {
 
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
+    if (!editorVisible()) return; // let native undo work in the playercard name fields
     const key = e.key.toLowerCase();
     if (key === 'z' && !e.shiftKey) {
       e.preventDefault();
@@ -141,17 +152,16 @@ if (canvas) {
   window.__bo2History = hist;
 }
 
-// Rebuild a full layer object from a stripped snapshot layer (img/canvas/ctx were
-// stripped for serialization). Mirrors editor.generatestackcanvas for a layer.
-function rebuildLayer(l) {
-  const layer = { ...l };
-  const img = window.editor?.icons?.[l.name];
-  if (img) layer.img = img;
-  const c = document.createElement('canvas');
-  const editorCanvas = window.editor?.canvas;
-  c.width = editorCanvas?.width ?? 300;
-  c.height = editorCanvas?.height ?? 300;
-  layer.canvas = c;
-  layer.ctx = c.getContext('2d');
-  return layer;
+// Index of the single slot that differs between two snapshots; if zero or many
+// differ, fall back to the restored state's own stacki.
+function changedIndex(prevState, nextState) {
+  const a = (prevState && prevState.stack) || [];
+  const b = (nextState && nextState.stack) || [];
+  let found = -1;
+  let count = 0;
+  for (let i = 0; i < 32; i++) {
+    if (JSON.stringify(a[i] ?? null) !== JSON.stringify(b[i] ?? null)) { found = i; count++; }
+  }
+  if (count === 1) return found;
+  return (nextState && typeof nextState.stacki === 'number') ? nextState.stacki : 0;
 }
