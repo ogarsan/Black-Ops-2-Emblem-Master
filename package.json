@@ -1,0 +1,28 @@
+{
+  "name": "black-ops-2-emblem-master",
+  "version": "0.1.0",
+  "description": "AI-powered BO2 emblem composer",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit --allowJs --checkJs",
+    "dev": "python3 -m http.server --directory docs 8080",
+    "deploy": "gh-pages --dist docs --dotfiles"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "gh-pages": "^6.1.0",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}
