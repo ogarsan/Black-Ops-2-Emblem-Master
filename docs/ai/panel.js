@@ -1,11 +1,13 @@
 // docs/ai/panel.js
 //
-// Chat panel DOM mount. Renders the AI tab UI: header (settings/new chat/undo
-// counter), scrolling messages list, and a textarea input.
+// Chat panel DOM mount. Renders the chat header (settings/new chat/undo counter),
+// scrolling messages list, textarea input, and an inline settings form.
 //
 // Security: every helper that takes user/LLM-supplied text uses textContent
 // (never innerHTML), so untrusted content can't inject markup. The header
-// buttons use innerHTML only for hardcoded emoji labels.
+// buttons set textContent for hardcoded emoji labels.
+
+import { loadSettings, saveSettings, clearKey } from './settings.js';
 
 const ICONS = {
   settings: '⚙',
@@ -39,6 +41,69 @@ export function mountPanel(root, { settings, conversation }) {
   inputRow.appendChild(input);
   root.append(header, messages, inputRow);
 
+  // ---- Inline settings view (toggled by the ⚙ button) ----
+  const settingsForm = el('div', 'bo2-ai-settings');
+  settingsForm.setAttribute('data-open', 'false');
+  const cur = loadSettings();
+  const providerSel = document.createElement('select');
+  providerSel.className = 'bo2-set-provider';
+  for (const p of ['openai', 'groq', 'gemini', 'anthropic', 'openai_compat']) {
+    const o = document.createElement('option');
+    o.value = p;
+    o.textContent = p;
+    if (p === cur.provider) o.selected = true;
+    providerSel.appendChild(o);
+  }
+  const modelInput = document.createElement('input');
+  modelInput.className = 'bo2-set-model';
+  modelInput.type = 'text';
+  modelInput.placeholder = 'model';
+  modelInput.value = cur.model || '';
+  const baseUrlInput = document.createElement('input');
+  baseUrlInput.className = 'bo2-set-baseurl';
+  baseUrlInput.type = 'text';
+  baseUrlInput.placeholder = 'base URL (openai_compat only)';
+  baseUrlInput.value = cur.baseUrl || '';
+  const keyInput = document.createElement('input');
+  keyInput.className = 'bo2-set-key';
+  keyInput.type = 'password';
+  keyInput.placeholder = 'API key';
+  keyInput.value = cur.apiKey || '';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'bo2-set-save';
+  saveBtn.type = 'button';
+  saveBtn.textContent = 'Save';
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'bo2-set-clear';
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Clear key';
+  settingsForm.append(
+    labeled('Provider', providerSel),
+    labeled('Model', modelInput),
+    labeled('Base URL', baseUrlInput),
+    labeled('API key', keyInput),
+    saveBtn,
+    clearBtn,
+  );
+  root.append(settingsForm);
+
+  function labeled(text, control) {
+    const row = el('label', 'bo2-set-row');
+    row.append(el('span', 'bo2-set-label', text), control);
+    return row;
+  }
+
+  saveBtn.addEventListener('click', () => {
+    saveSettings({
+      provider: providerSel.value,
+      model: modelInput.value.trim(),
+      baseUrl: baseUrlInput.value.trim(),
+      apiKey: keyInput.value,
+    });
+    settingsForm.setAttribute('data-open', 'false');
+  });
+  clearBtn.addEventListener('click', () => { clearKey(); keyInput.value = ''; });
+
   let sendHandler = () => {};
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -49,7 +114,10 @@ export function mountPanel(root, { settings, conversation }) {
       sendHandler(text);
     }
   });
-  settingsBtn.addEventListener('click', () => root.dispatchEvent(new CustomEvent('bo2:settings')));
+  settingsBtn.addEventListener('click', () => {
+    const openNow = settingsForm.getAttribute('data-open') !== 'true';
+    settingsForm.setAttribute('data-open', String(openNow));
+  });
   newChatBtn.addEventListener('click', () => root.dispatchEvent(new CustomEvent('bo2:newchat')));
 
   // Restore prior messages.

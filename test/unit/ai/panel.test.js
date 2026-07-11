@@ -51,3 +51,33 @@ describe('mountPanel', () => {
     expect(input.value).toBe('');
   });
 });
+
+describe('mountPanel — settings view', () => {
+  let root, panel;
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '<div id="host"></div>';
+    root = document.getElementById('host');
+    panel = mountPanel(root, { settings: { provider: 'openai', apiKey: '', model: 'gpt-4o-mini', baseUrl: '' }, conversation: [] });
+  });
+
+  it('settings form is hidden until the settings button is clicked', () => {
+    const form = root.querySelector('.bo2-ai-settings');
+    expect(form).not.toBe(null);
+    expect(form.getAttribute('data-open')).toBe('false');
+    root.querySelector('.bo2-ai-settings-btn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(form.getAttribute('data-open')).toBe('true');
+  });
+
+  it('Save persists provider/model/key to localStorage', () => {
+    root.querySelector('.bo2-ai-settings-btn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    root.querySelector('.bo2-set-provider').value = 'anthropic';
+    root.querySelector('.bo2-set-model').value = 'claude-3-5-sonnet-latest';
+    root.querySelector('.bo2-set-key').value = 'sk-test';
+    root.querySelector('.bo2-set-save').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const saved = JSON.parse(localStorage.getItem('bo2_ai_settings_v1'));
+    expect(saved.provider).toBe('anthropic');
+    expect(saved.model).toBe('claude-3-5-sonnet-latest');
+    expect(saved.apiKey).toBe('sk-test');
+  });
+});
