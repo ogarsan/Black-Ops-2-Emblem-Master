@@ -21,7 +21,8 @@ export class OpenAiAdapter extends AiAdapter {
   static baseUrl = ENDPOINT;
 
   async *streamChat({ apiKey, model, baseUrl, messages, tools, systemPrompt, signal }) {
-    const url = baseUrl || OpenAiAdapter.baseUrl;
+    // Use this.constructor so subclasses (GroqAdapter, OpenAiCompatAdapter) inherit their own baseUrl.
+    const url = baseUrl || this.constructor.baseUrl;
     const body = {
       model,
       stream: true,
