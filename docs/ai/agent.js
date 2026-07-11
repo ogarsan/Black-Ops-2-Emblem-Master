@@ -16,7 +16,13 @@
 
 import { execTool } from './tools/exec.js';
 
-const DEFAULT_MAX_DEPTH = 10;
+// A "turn" is one adapter request. The cap is a safety net against runaway
+// loops (model keeps emitting tool_calls forever), NOT a constraint on
+// emblem complexity — a full 32-layer emblem with several updates can
+// easily use 20+ tool calls in one turn, plus retries when the provider
+// rate-limits. 30 leaves comfortable headroom while still preventing
+// infinite loops. If you find the model hits this in normal use, raise it.
+const DEFAULT_MAX_DEPTH = 30;
 const DEFAULT_MAX_RETRIES = 3;
 const MAX_BACKOFF_MS = 30_000;
 
@@ -43,7 +49,7 @@ function sleep(ms, signal) {
  * @param {object}   opts.ctx            — ctx passed to tool handlers
  * @param {Function} [opts.execTool]     — dispatcher (defaults to ./tools/exec.js)
  * @param {Function} opts.onEvent        — receives { type:'text'|'tool_call'|'tool_result'|'done'|'error'|'retrying', ... }
- * @param {number}   [opts.maxDepth=10]
+ * @param {number}   [opts.maxDepth=30]
  * @param {number}   [opts.maxRetries=3] — per-turn retries on retryable errors (e.g. 429)
  * @param {AbortSignal} [opts.signal]
  * @returns {Promise<{ messages: Array, turns: number, aborted?: boolean }>}
