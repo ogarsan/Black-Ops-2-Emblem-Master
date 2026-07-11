@@ -13,7 +13,7 @@ user.
 |---|---|---|---|---|
 | `base64.js` (dankogai/js-base64) | upstream vendored (no version tag in file) | https://github.com/dankogai/js-base64 | BSD-3-Clause | `docs/js/base64.js`, classic `<script>` tag |
 | `pako` (nodeca/pako) | upstream vendored, minified | https://github.com/nodeca/pako | MIT | `docs/js/pako.min.js`, classic `<script>` tag |
-| `zod` | `^3.23.0` (exact version pinned at vendor step) | pnpm → bundled by esbuild | MIT | `docs/vendor/zod.min.js`, loaded as ESM `<script type="module">` |
+| `zod` | `3.25.76` (exact, see lockfile) | pnpm (declared `^3.23.0`, resolved to 3.25.76) → bundled by esbuild | MIT | `docs/vendor/zod.min.js`, loaded as ESM. Consumers `import { z } from '../../vendor/zod.min.js'` (no import-map). |
 
 ### Resolution for zod
 
@@ -36,7 +36,7 @@ by `docs/index.html`.
 | `@playwright/test` | `^1.45.0` | Apache-2.0 | E2E browser tests (Chromium only) |
 | `gh-pages` | `^6.1.0` | MIT | Deploys `docs/` to the `gh-pages` branch |
 | `typescript` | `^5.5.0` | Apache-2.0 | JSDoc `checkJs` type check (`tsc --noEmit --allowJs --checkJs`) |
-| `esbuild` | (transient, see Task 4) | MIT | Bundles zod into the vendor file once, then never again |
+| `esbuild` | `^0.28.1` | MIT | One-shot bundler for `docs/vendor/zod.min.js`. Listed as devDep so it lives in `node_modules/.bin/`. Pin majors; not auto-merged. |
 
 ## Updates and automation
 
