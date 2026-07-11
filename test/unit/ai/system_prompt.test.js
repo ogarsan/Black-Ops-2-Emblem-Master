@@ -73,11 +73,18 @@ describe('buildSystemPrompt — catalog source priority', () => {
     expect(r).toMatch(/300×300/);
   });
 
-  it('tightens Output style to discourage long thinking out loud', () => {
+  it('tightens Output style to forbid preambles and visible reasoning', () => {
     globalThis.__bo2Catalog = FIXTURE;
     const r = buildSystemPrompt({});
-    expect(r).toContain('ONE short sentence per turn');
-    expect(r).toMatch(/Do NOT think out loud/i);
-    expect(r).toMatch(/Plan v/i); // explicit example naming the failure mode
+    // Explicit rules the model will see.
+    expect(r).toMatch(/NEVER write preambles/i);
+    expect(r).toMatch(/Do not list reasons/i);
+    // Concrete BAD/GOOD examples that anchor the instruction.
+    expect(r).toMatch(/BAD:/);
+    expect(r).toMatch(/GOOD:/);
+    // The failure mode we're fixing (long internal monologue in prose).
+    expect(r).toMatch(/Let me think/i);
+    // Hard cap on response length.
+    expect(r).toMatch(/≤15 words|0 or 1 short sentences/);
   });
 });
