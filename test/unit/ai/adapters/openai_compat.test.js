@@ -33,4 +33,43 @@ describe('OpenAiCompatAdapter', () => {
     for await (const _ of iter) {}
     expect(fetch.mock.calls[0][0]).toBe('https://my.local/v1/chat/completions');
   });
+
+  // Regression: MiniMax users paste `https://api.minimax.io/v1` (the OpenAI-
+  // compat base), and the adapter used to add another /v1 → /v1/v1/chat/...
+  // → 404. We now detect the trailing /v1 and only append /chat/completions.
+  it('does not double-up /v1 when baseUrl already ends in /v1 (MiniMax case)', async () => {
+    const fetch = vi.fn(async () => new Response('data: [DONE]\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+    globalThis.fetch = fetch;
+    const iter = new OpenAiCompatAdapter().streamChat({
+      apiKey: 'k', model: 'm',
+      baseUrl: 'https://api.minimax.io/v1',
+      messages: [], tools: [], systemPrompt: '',
+    });
+    for await (const _ of iter) {}
+    expect(fetch.mock.calls[0][0]).toBe('https://api.minimax.io/v1/chat/completions');
+  });
+
+  it('does not double-up /v1 with a trailing slash on /v1', async () => {
+    const fetch = vi.fn(async () => new Response('data: [DONE]\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+    globalThis.fetch = fetch;
+    const iter = new OpenAiCompatAdapter().streamChat({
+      apiKey: 'k', model: 'm',
+      baseUrl: 'https://api.minimax.io/v1/',
+      messages: [], tools: [], systemPrompt: '',
+    });
+    for await (const _ of iter) {}
+    expect(fetch.mock.calls[0][0]).toBe('https://api.minimax.io/v1/chat/completions');
+  });
+
+  it('uses a baseUrl that already ends in /v1/chat/completions as-is', async () => {
+    const fetch = vi.fn(async () => new Response('data: [DONE]\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+    globalThis.fetch = fetch;
+    const iter = new OpenAiCompatAdapter().streamChat({
+      apiKey: 'k', model: 'm',
+      baseUrl: 'https://api.minimax.io/v1/chat/completions',
+      messages: [], tools: [], systemPrompt: '',
+    });
+    for await (const _ of iter) {}
+    expect(fetch.mock.calls[0][0]).toBe('https://api.minimax.io/v1/chat/completions');
+  });
 });
