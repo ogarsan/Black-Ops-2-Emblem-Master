@@ -25,7 +25,7 @@ import { loadSettings, saveSettings } from './settings.js';
 import { loadConversation, saveConversation, truncateForRequest, clearConversation } from './conversation.js';
 import { OpenAiAdapter } from './adapters/openai.js';
 import { execTool, getToolDefinitions } from './tools/exec.js';
-import './tools/add_layer.js'; // side-effect: registers add_layer on import
+import './tools/index.js'; // side-effect: registers all tools on import
 import { buildSystemPrompt } from './system_prompt.js';
 import { currentState } from '../store.js';
 
