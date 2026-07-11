@@ -129,6 +129,10 @@ if (canvas) {
 
       ed.draw?.();
       ed.getusedlayers?.();
+      // Belt-and-suspenders: never let a stale "hide editor" onload (armed by the
+      // Escape-exit path) fire when updateimgs() reassigns #bigemblem.src.
+      const bg = document.getElementById('bigemblem');
+      if (bg) bg.onload = null;
       window.updateimgs?.();
       lastJson = JSON.stringify(state);
     } finally {

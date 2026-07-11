@@ -172,3 +172,26 @@ describe('hooks.js undo — faithful restore', () => {
     expect(prevent).not.toHaveBeenCalled(); // native undo left alone
   });
 });
+
+describe('hooks.js — no stale onload eject', () => {
+  let ed;
+  beforeEach(() => {
+    localStorage.clear();
+    makeDom({ editorVisible: true });                 // creates #editor(visible), #bigemblem, #layer-img-*, #matrix-*
+    const bg = document.getElementById('bigemblem') || (() => {
+      const e = document.createElement('img'); e.id = 'bigemblem'; document.body.appendChild(e); return e;
+    })();
+    bg.onload = () => { throw new Error('stale onload must not survive a restore'); };
+    ({ ed } = makeEditor());
+    window.editor = ed;
+    window.details = { playername: 'P', playerclantag: '[C]', playerbg: '' };
+    window.updateimgs = () => {}; // no-op; the point is that hooks cleared onload first
+    delete window.__bo2ApplyState;
+  });
+
+  it('clears #bigemblem.onload before calling updateimgs during restore', async () => {
+    await loadHooksFresh();
+    window.__bo2ApplyState({ stack: new Array(32).fill(null), stacki: 0, details: {} });
+    expect(document.getElementById('bigemblem').onload).toBe(null);
+  });
+});
