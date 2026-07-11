@@ -23,3 +23,6 @@ test-results/
 
 # SDD scratch (progress ledger, review packages — gitignored on purpose)
 .superpowers/
+
+# Isolated worktrees (created by the using-git-worktrees skill)
+.worktrees/
