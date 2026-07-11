@@ -19,11 +19,28 @@ for (const id of ids) {
     document.body.appendChild(el);
   }
 }
-// Pre-create 32 layer preview nodes.
+// Pre-create 32 layer preview containers (id "layer-N") and their inner <img>
+// elements (id "layer-img-N"). The latter is what `editor.loaddata()` rewrites
+// the src of; tests don't actually render anything, but the IDs need to exist.
 for (let i = 0; i < 32; i++) {
   if (!document.getElementById(`layer-${i}`)) {
     const el = document.createElement('div');
     el.id = `layer-${i}`;
     document.body.appendChild(el);
   }
+  if (!document.getElementById(`layer-img-${i}`)) {
+    const el = document.createElement('img');
+    el.id = `layer-img-${i}`;
+    document.body.appendChild(el);
+  }
 }
+
+// jsdom doesn't implement canvas.getContext('2d') without the `canvas` npm
+// package. We don't actually render pixels in unit tests — we just need a
+// defined ctx object so rebuildLayer in hooks.js doesn't fail. Returning a
+// no-op stub keeps the API surface honest (setTransform, drawImage, etc.
+// don't blow up if called).
+HTMLCanvasElement.prototype.getContext = function () {
+  const noop = () => {};
+  return new Proxy({}, { get: (_t, prop) => (prop in {} ? noop : noop) });
+};
