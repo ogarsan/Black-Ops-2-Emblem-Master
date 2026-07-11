@@ -20,3 +20,6 @@ test-results/
 # Local env
 .env
 .env.local
+
+# SDD scratch (progress ledger, review packages — gitignored on purpose)
+.superpowers/
