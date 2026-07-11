@@ -18,7 +18,15 @@
  * @returns {string} system prompt for the chat completion request.
  */
 export function buildSystemPrompt({ emblemData, backgrounds, extra } = {}) {
-  const data = emblemData ?? globalThis.emblemdata;
+  // Source priority:
+  //   1. caller-supplied `emblemData` (lets tests inject fixtures)
+  //   2. window.__bo2Catalog — frozen copy captured synchronously by
+  //      js/bo2_catalog_capture.js right after emblems.js loads. This is the
+  //      ONLY reliable source because editor.js sets the live `var emblemdata`
+  //      to null after loadedall() (memory optimization).
+  //   3. live `globalThis.emblemdata` — kept as a last-ditch fallback in case
+  //      the capture script isn't present (e.g. older index.html).
+  const data = emblemData ?? globalThis.__bo2Catalog ?? globalThis.emblemdata;
   const lines = [
     'You compose Call of Duty: Black Ops II emblems by calling tools. Each call mutates the live editor; you see the result on the next turn.',
     '',
