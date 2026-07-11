@@ -1,22 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { stubOpenAi } from './helpers/stub_providers.js';
+import { gotoAiTabWithKey } from './helpers/ai_tab.js';
 
-async function gotoAiTabWithKey(page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => document.getElementById('playercard')?.style.visibility === 'visible', { timeout: 60_000 });
-  await page.evaluate(() =>
-    localStorage.setItem(
-      'bo2_ai_settings_v1',
-      JSON.stringify({ provider: 'openai', apiKey: 'sk-fake', model: 'gpt-4o-mini', baseUrl: '' })
-    )
-  );
-  await page.waitForFunction(() => typeof window.editor?.changetab === 'function');
-  // Our patched changetab('ai') makes the AI container + #picker visible
-  // without requiring the user to navigate into picker mode via the upstream
-  // layer-preview UI (which is hard to script reliably).
-  await page.evaluate(() => window.editor.changetab('ai'));
-  await page.waitForSelector('.bo2-ai-input', { timeout: 5_000 });
-}
+async function _unused() {} // placeholder so Edit doesn't break
 
 test('undo/redo: AI adds a layer, Ctrl+Z removes it, Ctrl+Shift+Z restores it', async ({ page }) => {
   await stubOpenAi(page, 'openai_tool_call_stream.txt');

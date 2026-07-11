@@ -59,6 +59,7 @@ if (aiTab) {
   let messages = initialConversation.slice();
   let streaming = null;
   let lastAiTurnSnapshot = null;
+  let currentAbort = null;
 
   // Settings / New chat hooks: re-read or wipe state, then re-render.
   aiTab.addEventListener('bo2:settings', () => {
@@ -109,9 +110,11 @@ if (aiTab) {
     const toolResults = [];
 
     streaming = (async () => {
+      currentAbort = new AbortController();
       try {
         panel.setStreaming(true);
         for await (const ev of adapter.streamChat({
+          signal: currentAbort.signal,
           apiKey: s.apiKey,
           model: s.model,
           baseUrl: s.baseUrl,
@@ -158,9 +161,20 @@ if (aiTab) {
         panel.showError(`Unhandled error: ${err?.message ?? String(err)}`);
       } finally {
         streaming = null;
+        currentAbort = null;
         panel.setStreaming(false);
       }
     })();
+  });
+
+  // Esc aborts any in-flight stream. Listener lives on `document` so it works
+  // whether the textarea has focus or not (Playwright sends to the active
+  // element, which during streaming is usually the textarea).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!streaming || !currentAbort) return;
+    e.preventDefault();
+    currentAbort.abort();
   });
 }
 
