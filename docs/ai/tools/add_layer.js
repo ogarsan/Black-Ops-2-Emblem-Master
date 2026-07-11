@@ -88,6 +88,13 @@ export function registerAddLayer() {
       ctx.editor.draw();
       ctx.editor.getusedlayers();
       window.updateimgs?.();
+      // Mirror what upstream's icon.onclick does: refresh the per-layer preview
+      // image so #layer-img-N shows the actual emblem, not img/empty.png.
+      const previewImg = document.getElementById(`layer-img-${idx}`);
+      if (previewImg && layer.img && layer.img.src) previewImg.src = layer.img.src;
+      // Update the SVG color filter for this layer (default identity matrix until
+      // user changes hue/sat/bri/alpha — this keeps the preview uncolored until
+      // update_layer runs).
       ctx.history?.snapshot(ctx.currentState?.());
 
       return { inserted_at: position, name };

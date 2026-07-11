@@ -167,12 +167,30 @@ if (aiTab) {
 // Patch editor.changetab to recognise 'ai'. Upstream never knew about us so we
 // re-use its hide/show infra by pretending to switch to 'emblems' then
 // overriding to show our container.
+//
+// `window.editor` is created inside main.js's `window.onload` handler, which
+// fires AFTER 261 emblem PNGs decode. That happens asynchronously, possibly
+// after this module runs. So we install the patch via a small polling loop
+// that gives up after 30s (the editor must exist by then or the page is
+// broken anyway).
 {
-  const origChangetab = window.editor?.changetab;
-  if (typeof origChangetab === 'function') {
+  const installPatch = () => {
+    const origChangetab = window.editor?.changetab;
+    if (typeof origChangetab !== 'function') return false;
+    if (window.editor.changetab.__bo2Patched) return true;
     window.editor.changetab = function (cat) {
       if (cat === 'ai') {
         origChangetab.call(this, 'emblems');
+        // The AI tab is inside `<span id="picker">` which upstream keeps
+        // `display:none` until the user enters picker mode. Show the picker
+        // so the AI container is reachable. We also flip the `#editor`
+        // container to visible (and hide `#playercard`) because the AI panel
+        // is nested under `#editor`, not `#playercard`. Upstream reaches the
+        // editor only by clicking #smallemblem/#bigemblem — we shortcut to it
+        // when the user opens the AI tab.
+        document.getElementById('picker')?.style.setProperty('display', 'inline', 'important');
+        document.getElementById('playercard')?.style.setProperty('visibility', 'hidden', 'important');
+        document.getElementById('editor')?.style.setProperty('visibility', 'visible', 'important');
         document.getElementById('tab-emblems')?.classList.remove('selected');
         document.getElementById('tab-emblems')?.classList.add('deselected');
         document.getElementById('emblems').style.display = 'none';
@@ -186,5 +204,16 @@ if (aiTab) {
         origChangetab.call(this, cat);
       }
     };
+    window.editor.changetab.__bo2Patched = true;
+    return true;
+  };
+  // Try immediately (in case onload already fired), then poll.
+  if (!installPatch()) {
+    let attempts = 0;
+    const tick = () => {
+      if (installPatch() || ++attempts > 600) return;
+      setTimeout(tick, 50);
+    };
+    setTimeout(tick, 50);
   }
 }
