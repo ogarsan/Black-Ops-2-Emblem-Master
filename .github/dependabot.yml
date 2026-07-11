@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      patch-and-minor:
+        update-types: ["minor", "patch"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    # Auto-merge patch/minor in PRs after CI is green.
+    # Major requires manual review.
+
+  # Vendored runtime deps live in docs/vendor/ — handle manually, not via Dependabot.
