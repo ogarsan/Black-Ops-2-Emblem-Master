@@ -24,10 +24,26 @@ import { mountPanel } from './panel.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { loadConversation, saveConversation, truncateForRequest, clearConversation } from './conversation.js';
 import { OpenAiAdapter } from './adapters/openai.js';
+import { GroqAdapter } from './adapters/groq.js';
+import { GeminiAdapter } from './adapters/gemini.js';
+import { AnthropicAdapter } from './adapters/anthropic.js';
+import { OpenAiCompatAdapter } from './adapters/openai_compat.js';
 import { execTool, getToolDefinitions } from './tools/exec.js';
 import './tools/index.js'; // side-effect: registers all tools on import
 import { buildSystemPrompt } from './system_prompt.js';
 import { currentState } from '../store.js';
+
+const ADAPTERS = {
+  openai: OpenAiAdapter,
+  groq: GroqAdapter,
+  gemini: GeminiAdapter,
+  anthropic: AnthropicAdapter,
+  openai_compat: OpenAiCompatAdapter,
+};
+
+function getAdapter(provider) {
+  return new (ADAPTERS[provider] ?? OpenAiAdapter)();
+}
 
 const EMBLEM_CATALOG = (typeof globalThis.emblemdata === 'object' && globalThis.emblemdata) || {
   type: [], tools: [], ranks: [], gear: [], emblems: [],
@@ -71,7 +87,7 @@ if (aiTab) {
 
     const assistantUpdater = panel.appendAssistant();
     const systemPrompt = buildSystemPrompt();
-    const adapter = new OpenAiAdapter();
+    const adapter = getAdapter(s.provider);
     const ctx = {
       editor: window.editor,
       history: window.__bo2History,
