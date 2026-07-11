@@ -92,4 +92,24 @@ describe('buildSystemPrompt — catalog source priority', () => {
     // Hard cap on response length.
     expect(r).toMatch(/≤15 words|0 or 1 short sentences/);
   });
+
+  it('includes a Layer order section so the model understands z-order', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toMatch(/## Layer order/);
+    expect(r).toMatch(/Position 1 is the BOTTOM/);
+    expect(r).toMatch(/higher positions COVER/);
+  });
+
+  it('tightens Output style with a hard 25-word cap and filler bans', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    // Hard cap on total visible text per turn.
+    expect(r).toMatch(/25 words/);
+    // Explicit bans on common filler openers.
+    expect(r).toMatch(/NEVER start a reply with: Sure, Let me, I'll/);
+    // Regression: the previous BAD/GOOD example stays.
+    expect(r).toMatch(/BAD:/);
+    expect(r).toMatch(/GOOD:/);
+  });
 });
