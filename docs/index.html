@@ -61,6 +61,7 @@
 								<td onclick="editor.changetab('ranks')"><span class="deselected" id="tab-ranks">RANKS</span></td>
 								<td onclick="editor.changetab('tools')"><span class="deselected" id="tab-tools">TOOLS</span></td>
 								<td onclick="editor.changetab('type')"><span class="deselected" id="tab-type">TYPE</span></td>
+								<td onclick="editor.changetab('ai')"><span class="deselected" id="tab-ai">AI</span></td>
 							</tr>
 						</table>
 						<div id="emblems" class="container" style="display:none"></div>
@@ -68,6 +69,7 @@
 						<div id="type" class="container" style="display:none"></div>
 						<div id="tools" class="container" style="display:none"></div>
 						<div id="ranks" class="container" style="display:none"></div>
+						<div id="ai" class="container" style="display:none"></div>
 					</div>
 				</span>
 			
@@ -110,5 +112,6 @@
 			<div>Emblems loaded: <span id="emblemcount">0</span> / 261</div>
 		</div>
 		<script type="module" src="hooks.js"></script>
+		<script type="module" src="ai/main.js"></script>
 	</body>
 </html>
