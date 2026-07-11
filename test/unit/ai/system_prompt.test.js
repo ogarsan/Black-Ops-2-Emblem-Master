@@ -63,14 +63,19 @@ describe('buildSystemPrompt — catalog source priority', () => {
     expect(r).toContain('catalog not yet loaded — wait and retry');
   });
 
-  it('includes a Canvas section so the model knows the visible coordinate range', () => {
+  it('includes a Canvas section with the actual pixel-coordinate system (origin upper-left)', () => {
     globalThis.__bo2Catalog = FIXTURE;
     const r = buildSystemPrompt({});
     expect(r).toContain('## Canvas');
-    // Specifically: document the visible coord range and the scale defaults.
-    expect(r).toMatch(/x ∈ \[-2,\s*\+2\]/);
-    expect(r).toMatch(/y ∈ \[-2,\s*\+2\]/);
+    // The model must see the real pixel coords, not the previous (wrong)
+    // "centered at 0, x ∈ [-2, +2]" framing.
     expect(r).toMatch(/300×300/);
+    expect(r).toMatch(/UPPER-LEFT/);
+    expect(r).toMatch(/CENTER/);
+    expect(r).toMatch(/150/); // center value
+    // The bug we just fixed: assert the BAD framing is gone.
+    expect(r).not.toMatch(/centered at 0/);
+    expect(r).not.toMatch(/\[-2,\s*\+2\]/);
   });
 
   it('tightens Output style to forbid preambles and visible reasoning', () => {

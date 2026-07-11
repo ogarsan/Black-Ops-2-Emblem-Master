@@ -14,17 +14,21 @@ describe('get_canvas_info', () => {
     registerGetCanvasInfo();
   });
 
-  it('returns dimensions, coord range, and scale semantics from a real-ish editor', async () => {
+  it('returns the actual pixel coordinate system (origin at upper-left, range 0..300)', async () => {
     globalThis.window.editor = { canvas: { width: 300, height: 300 } };
     const out = await execTool('get_canvas_info', {}, { editor: window.editor });
     expect(out.ok).toBe(true);
     expect(out.result).toMatchObject({
       width_px: 300,
       height_px: 300,
-      coord_range: { x: [-2, 2], y: [-2, 2] },
+      origin: 'top-left',
+      x_range_px: [0, 300],
+      y_range_px: [0, 300],
+      center: { x: 150, y: 150 },
     });
-    expect(out.result.scale).toMatchObject({ default: 1.0 });
-    expect(out.result.fields.x).toMatch(/integer/);
+    expect(out.result.scale).toMatchObject({ fills_half_canvas: 1.0, fills_canvas: 2.0 });
+    expect(out.result.fields.x).toMatch(/LEFT edge/);
+    expect(out.result.fields.y).toMatch(/TOP edge/);
   });
 
   it('falls back to 300×300 when no editor in ctx (e.g. first call before layers exist)', async () => {
