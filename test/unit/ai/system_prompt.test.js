@@ -62,4 +62,22 @@ describe('buildSystemPrompt — catalog source priority', () => {
     const r = buildSystemPrompt({});
     expect(r).toContain('catalog not yet loaded — wait and retry');
   });
+
+  it('includes a Canvas section so the model knows the visible coordinate range', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toContain('## Canvas');
+    // Specifically: document the visible coord range and the scale defaults.
+    expect(r).toMatch(/x ∈ \[-2,\s*\+2\]/);
+    expect(r).toMatch(/y ∈ \[-2,\s*\+2\]/);
+    expect(r).toMatch(/300×300/);
+  });
+
+  it('tightens Output style to discourage long thinking out loud', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toContain('ONE short sentence per turn');
+    expect(r).toMatch(/Do NOT think out loud/i);
+    expect(r).toMatch(/Plan v/i); // explicit example naming the failure mode
+  });
 });
