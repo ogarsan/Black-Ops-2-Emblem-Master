@@ -1,26 +1,180 @@
 /* docs/css/ai.css
  *
- * Styles for the AI tab and shared undo/redo UI. The undo buttons live in the
- * editor prompt area (alongside the existing "ESC Back" / "ENTER Confirm"
- * controls) so the user sees them no matter which picker tab is active.
+ * BO2-themed styles for the AI chat drawer, undo counter, tool chips, settings,
+ * and the chat input. The drawer is viewport-level (outside #frame) so text is
+ * crisp and not pixel-scaled by the editor's CSS transform.
  *
- * Other AI-tab UI (chat bubbles, tool chips, settings modal) lands here as
- * Tasks 11–30 bring it online.
+ * Palette: bg #1e1e1e; text #fff / secondary #ccc / muted #888; borders #555;
+ * orange accent #ff8000 (focus/active); gold #e1ad33; error #ff6b6b.
  */
 
+/* ===== AI chat drawer (viewport-level, outside #frame) ===== */
+.bo2-ai-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  z-index: 9999;
+  font-family: 'Agency FB', arial;
+  user-select: text;              /* the app sets user-select:none globally */
+  pointer-events: none;           /* empty gutter is click-through */
+}
+.bo2-ai-drawer > * { pointer-events: auto; }
+
+.bo2-ai-handle {
+  align-self: center;
+  width: 30px;
+  min-height: 90px;
+  padding: 12px 0;
+  background: #1e1e1e;
+  color: #ccc;
+  border: 2px solid #555;
+  border-right: none;
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 3px;
+  font-size: 18px;
+  font-family: inherit;
+}
+.bo2-ai-handle:hover { color: #fff; border-color: #ff8000; }
+
+.bo2-ai-panelhost {
+  width: 340px;
+  height: 100%;
+  box-sizing: border-box;
+  background: #1e1e1e;
+  border-left: 2px solid #555;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 180ms ease;
+}
+.bo2-ai-drawer[data-open="true"]  .bo2-ai-panelhost { transform: translateX(0); }
+.bo2-ai-drawer[data-open="false"] .bo2-ai-panelhost { transform: translateX(100%); }
+
+.bo2-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 2px solid #555;
+  color: #ccc;
+}
+.bo2-ai-header button {
+  background: transparent;
+  border: 2px solid #555;
+  color: #ccc;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.bo2-ai-header button:hover { color: #fff; border-color: #ff8000; }
+
+.bo2-ai-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bo2-msg {
+  max-width: 90%;
+  padding: 6px 10px;
+  border: 2px solid #555;
+  font-size: 16px;
+  color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bo2-msg-user { align-self: flex-end; background: #2a2a2a; }
+.bo2-msg-assistant { align-self: flex-start; background: #161616; }
+
+.bo2-tool-chip {
+  align-self: flex-start;
+  font-size: 13px;
+  color: #e1ad33;
+  border: 1px solid #555;
+  padding: 2px 6px;
+  cursor: default;
+  word-break: break-all;
+}
+.bo2-tool-error { color: #ff6b6b; border-color: #ff6b6b; }
+
+.bo2-streaming { color: #888; font-size: 14px; }
+.bo2-error-banner {
+  color: #fff;
+  background: #5a1a1a;
+  border: 2px solid #ff6b6b;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.bo2-ai-inputrow { padding: 8px; border-top: 2px solid #555; }
+.bo2-ai-input {
+  position: static;               /* override main.css `textarea { position:absolute }` */
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  background: #161616;
+  border: 2px solid #555;
+  color: #ccc;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 6px 8px;
+}
+.bo2-ai-input:focus { outline: none; border-color: #ff8000; color: #fff; }
+.bo2-ai-input::placeholder { color: #888; }
+
+/* ===== Undo counter (kept from earlier tasks) ===== */
 .bo2-undo-counter {
   font-size: 18px;
   color: #ccc;
   margin-left: 8px;
 }
-
 .bo2-undo-btn {
   cursor: pointer;
   user-select: none;
   opacity: 1;
 }
-
 .bo2-undo-btn[disabled] {
   opacity: 0.4;
   cursor: default;
 }
+
+/* ===== Settings view (inline, toggled by ⚙ button) ===== */
+.bo2-ai-settings {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 2px solid #555;
+  background: #161616;
+}
+.bo2-ai-settings[data-open="true"] { display: flex; }
+.bo2-set-row { display: flex; align-items: center; gap: 8px; color: #ccc; font-size: 14px; }
+.bo2-set-label { width: 78px; flex: none; }
+.bo2-ai-settings select,
+.bo2-ai-settings input {
+  flex: 1;
+  position: static;
+  background: #1e1e1e;
+  border: 2px solid #555;
+  color: #ccc;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 3px 6px;
+}
+.bo2-ai-settings select:focus,
+.bo2-ai-settings input:focus { outline: none; border-color: #ff8000; color: #fff; }
+.bo2-ai-settings button {
+  background: transparent; border: 2px solid #555; color: #ccc;
+  font-family: inherit; font-size: 14px; padding: 3px 8px; cursor: pointer;
+}
+.bo2-ai-settings button:hover { color: #fff; border-color: #ff8000; }
