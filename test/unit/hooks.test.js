@@ -195,3 +195,26 @@ describe('hooks.js — no stale onload eject', () => {
     expect(document.getElementById('bigemblem').onload).toBe(null);
   });
 });
+
+describe('hooks.js — __bo2RefreshView', () => {
+  let ed;
+  beforeEach(() => {
+    localStorage.clear();
+    makeDom({ editorVisible: true });
+    ({ ed } = makeEditor());
+    window.editor = ed;
+    window.details = { playername: 'P', playerclantag: '[C]', playerbg: '' };
+    window.updateimgs = () => {};
+    delete window.__bo2RefreshView;
+  });
+
+  it('repaints layer previews from the live stack and redraws', async () => {
+    await loadHooksFresh();
+    ed.stack[3] = { name: 'Skull', img: { src: 'emblems/Skull.png' }, x: 150, y: 150, rotate: 0, hue: 0, saturation: 0, brightness: 1, alpha: 1, scalex: 1.15, scaley: 1.15 };
+    const drawSpy = vi.spyOn(ed, 'draw');
+    window.__bo2RefreshView();
+    expect(document.getElementById('layer-img-3').src).toMatch(/Skull\.png$/);
+    expect(document.getElementById('layer-img-0').src).toMatch(/empty\.png$/);
+    expect(drawSpy).toHaveBeenCalled();
+  });
+});
