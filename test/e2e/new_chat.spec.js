@@ -1,21 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { gotoAiTabWithKey } from './helpers/ai_tab.js';
 
 test('new chat clears conversation', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => document.getElementById('playercard')?.style.visibility === 'visible', { timeout: 60_000 });
+  await page.waitForSelector('.bo2-ai-handle', { timeout: 60_000 });
   await page.evaluate(() =>
     localStorage.setItem('bo2_chat_history_v1', JSON.stringify([{ role: 'user', content: 'x' }]))
   );
   await page.reload();
-  await page.waitForFunction(() => document.getElementById('playercard')?.style.visibility === 'visible');
+  await page.waitForSelector('.bo2-ai-handle', { timeout: 60_000 });
 
-  // Wait for the AI-tab patch to be installed (ai/main.js polls for window.editor).
-  await page.waitForFunction(
-    () => typeof window.editor?.changetab === 'function' && window.editor.changetab.__bo2Patched === true,
-    { timeout: 10_000 }
-  );
-  await page.evaluate(() => window.editor.changetab('ai'));
+  // Open the drawer via the handle.
+  await page.locator('.bo2-ai-handle').click();
   await page.waitForSelector('.bo2-ai-input', { timeout: 5_000 });
 
   // The persisted user message is rendered as a bubble on mount.

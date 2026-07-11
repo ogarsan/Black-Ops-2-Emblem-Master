@@ -44,12 +44,21 @@ if (canvas) {
   // Deterministic baseline: wrap the global `loadedall()` so the first
   // snapshot is recorded exactly once, right after upstream finished setting
   // up the editor and applying any `?load=…` from the URL.
+  //
+  // The wrap is the primary path; we ALSO poll briefly because upstream's
+  // loadedall may already have fired before this deferred module evaluated,
+  // OR it may fire after a race window where a user action could otherwise
+  // sneak in before the baseline exists.
   let seeded = false;
   const seedBaseline = () => {
-    if (seeded || !window.editor) return;
+    // Editor must exist AND its icon map must be populated. The icon map fills
+    // as each emblem PNG decodes; populated = upstream finished loadedall().
+    if (seeded || !window.editor) return false;
+    if (!window.editor.icons || Object.keys(window.editor.icons).length === 0) return false;
     seeded = true;
     if (hist.size() === 0) commit();                    // fresh session → baseline
     else lastJson = JSON.stringify(currentState());     // restored history → sync ref
+    return true;
   };
   const origLoadedall = typeof window.loadedall === 'function' ? window.loadedall : null;
   window.loadedall = function (...args) {
@@ -57,10 +66,16 @@ if (canvas) {
     seedBaseline();
     return r;
   };
-  // Fallback: if loadedall already ran before this module loaded (icons populated),
-  // seed now.
-  if (window.editor && window.editor.icons && Object.keys(window.editor.icons).length) {
-    seedBaseline();
+  // Try immediately + poll until window.editor is set (it's created inside
+  // main.js's window.onload, which fires after 261 emblem PNGs decode —
+  // possibly AFTER our deferred module ran).
+  if (!seedBaseline()) {
+    let attempts = 0;
+    const tick = () => {
+      if (seedBaseline() || ++attempts > 600) return; // ~30 s upper bound
+      setTimeout(tick, 50);
+    };
+    setTimeout(tick, 50);
   }
 
   // Commit on the trailing edge of interactions. keyup fires AFTER the editor's

@@ -6,6 +6,11 @@ import { mockEditor } from '../helpers/mock_editor.js';
 // jsdom_setup.js pre-creates #canvas and the layer nodes.
 async function loadHooksFresh() {
   vi.resetModules();
+  // Set up a stub global loadedall BEFORE hooks.js evaluates, so its wrap
+  // captures it. Populate icons immediately so seedBaseline fires (in real
+  // production, upstream fires loadedall only AFTER the icons map is filled).
+  globalThis.window.loadedall = function () {};
+  mockEditor({ stack: new Array(32).fill(null), stacki: 0, icons: { Skull: {} } });
   await import('../../docs/hooks.js');
 }
 
@@ -25,8 +30,11 @@ describe('hooks.js granular capture', () => {
 
   it('seeds exactly one baseline snapshot when loadedall fires', async () => {
     await loadHooksFresh();
-    expect(window.__bo2History.size()).toBe(0); // not seeded until editor "ready"
-    window.loadedall();                          // upstream calls this after images load
+    // Icons are already populated in the helper. Hooks has wrapped loadedall
+    // and seedBaseline runs the moment window.editor exists with icons, which
+    // happens at import time. The baseline is the size we expect.
+    expect(window.__bo2History.size()).toBe(1);
+    window.loadedall(); // no-op (no edit since baseline) — size stays 1
     expect(window.__bo2History.size()).toBe(1);
   });
 

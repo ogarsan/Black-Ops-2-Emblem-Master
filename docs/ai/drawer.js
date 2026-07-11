@@ -46,10 +46,15 @@ export function mountDrawer({ settings, conversation }) {
 
   // Bubble-phase guard on the drawer root: input still types/scrolls, but the
   // event is stopped before reaching document (editor handlers) or window
-  // (hooks capture). Escape emits bo2:abort first.
+  // (hooks capture). Escape emits bo2:abort first. Editor undo/redo shortcuts
+  // (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y) are let through so hooks.js
+  // can pop history; we don't intercept them.
   const swallow = (e) => {
-    if (e.type === 'keydown' && e.key === 'Escape') {
-      root.dispatchEvent(new CustomEvent('bo2:abort'));
+    if (e.type === 'keydown') {
+      const k = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      if (k === 'escape') root.dispatchEvent(new CustomEvent('bo2:abort'));
+      if (mod && (k === 'z' || k === 'y')) return; // pass through to hooks.js
     }
     e.stopPropagation();
   };
