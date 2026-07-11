@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { registerTool, execTool, resetRegistry } from '../../../../docs/ai/tools/exec.js';
+import { registerTool, execTool, getToolDefinitions, resetRegistry } from '../../../../docs/ai/tools/exec.js';
 
 beforeEach(resetRegistry);
 
@@ -56,5 +56,24 @@ describe('execTool', () => {
     const out = await execTool('soft_fail', {}, {});
     expect(out.ok).toBe(false);
     expect(out.error).toBe('bad input name');
+  });
+});
+
+describe('getToolDefinitions', () => {
+  it('includes name from the Map key (adapters read t.name for OpenAI/Anthropic/Gemini wire formats)', () => {
+    // Regression: getToolDefinitions used to spread only `definition` (description)
+    // and drop the `name` Map key, breaking every adapter that builds
+    // function_declarations / function objects with `name: t.name`.
+    registerTool({
+      name: 'add_layer',
+      definition: { description: 'adds a layer' },
+      schema: z.object({ name: z.string() }),
+      handler: async () => ({}),
+    });
+    const defs = getToolDefinitions();
+    expect(defs).toHaveLength(1);
+    expect(defs[0].name).toBe('add_layer');
+    expect(defs[0].description).toBe('adds a layer');
+    expect(defs[0].parameters).toEqual({ type: 'object', properties: { name: { type: 'string' } }, required: ['name'] });
   });
 });

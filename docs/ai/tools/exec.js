@@ -32,7 +32,11 @@ export function listTools() {
  * pulling in `zod-to-json-schema`.
  */
 export function getToolDefinitions() {
-  return Array.from(registry.values()).map(({ definition, schema }) => ({
+  // Spread the Map key (`name`) explicitly: `registerTool()` stores it
+  // separately from `definition` (which carries description/schema fields), so
+  // the adapter's `t.name` read is empty unless we put it back here.
+  return Array.from(registry.entries()).map(([name, { definition, schema }]) => ({
+    name,
     ...definition,
     parameters: schemaToJsonSchema(schema),
   }));
