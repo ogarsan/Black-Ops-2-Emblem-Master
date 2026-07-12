@@ -36,7 +36,7 @@ export function registerUpdateLayer() {
       // main canvas and bottom-strip preview reflect the new properties.
       // Order: createfilter first (sets #matrix-N), then generatestackcanvas
       // (re-paints stack[i].canvas with that filter for the main canvas).
-      ctx.editor.stacki = idx;
+      ctx.editor.changestacki?.(idx);
       ctx.editor.createfilter?.(cur.hue, cur.saturation, cur.brightness, cur.alpha);
       ctx.editor.generatestackcanvas?.();
       ctx.editor.draw?.();

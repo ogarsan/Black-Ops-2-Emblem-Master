@@ -93,7 +93,7 @@ export function registerAddLayer() {
       //   2. generatestackcanvas re-paints stack[stacki].canvas with that
       //      filter (the MAIN canvas composites stack[i].canvas; without
       //      this re-paint, the main canvas stays white where colors are added).
-      ctx.editor.stacki = idx;
+      ctx.editor.changestacki?.(idx);
       ctx.editor.createfilter?.(layer.hue, layer.saturation, layer.brightness, layer.alpha);
       ctx.editor.generatestackcanvas?.();
       ctx.editor.draw?.();

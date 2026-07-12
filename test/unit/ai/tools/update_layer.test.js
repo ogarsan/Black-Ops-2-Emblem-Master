@@ -50,7 +50,7 @@ describe('update_layer', () => {
   // updated and the bottom-strip layer preview kept showing the OLD color.
   // Both calls are now required so the main canvas AND the per-layer preview
   // reflect the new properties.
-  it('repaints the layer canvas + refreshes the color filter so the main canvas and preview update', async () => {
+  it('calls editor.changestacki + repaints via createfilter/generatestackcanvas', async () => {
     const stack = new Array(32).fill(null);
     stack[4] = layer();
     const editor = {
@@ -58,12 +58,14 @@ describe('update_layer', () => {
       draw: vi.fn(),
       generatestackcanvas: vi.fn(),
       createfilter: vi.fn(),
+      changestacki: vi.fn(),
     };
     await execTool('update_layer', { position: 5, hue: 0.8, saturation: 0.4 }, { editor });
-    expect(editor.stacki).toBe(4); // set to the affected slot before repaint
+    expect(editor.changestacki).toHaveBeenCalledOnce();
+    expect(editor.changestacki).toHaveBeenCalledWith(4);
     expect(editor.generatestackcanvas).toHaveBeenCalledOnce();
     expect(editor.createfilter).toHaveBeenCalledOnce();
     const [h, s, v, a] = editor.createfilter.mock.calls[0];
-    expect([h, s, v, a]).toEqual([0.8, 0.4, 1, 1]); // hue/sat updated, bri/alpha preserved
+    expect([h, s, v, a]).toEqual([0.8, 0.4, 1, 1]);
   });
 });

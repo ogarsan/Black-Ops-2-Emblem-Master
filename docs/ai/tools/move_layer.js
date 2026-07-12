@@ -27,7 +27,7 @@ export function registerMoveLayer() {
       //     slot's coordinates / filter (the SVG filter is keyed to the slot)
       //   - the #layer-img-N preview src is updated to the now-current emblem
       const repaint = (idx) => {
-        ctx.editor.stacki = idx;
+        ctx.editor.changestacki?.(idx);
         // createfilter first (sets the SVG color filter), then
         // generatestackcanvas re-paints stack[i].canvas with that filter
         // for the main canvas. Wrong order bakes the OLD filter into the

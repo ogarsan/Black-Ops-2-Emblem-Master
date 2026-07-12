@@ -5,7 +5,7 @@ import { refreshEditorView } from '../../../docs/ai/refresh.js';
 const IDENTITY_VALUES = '1 0 0 0 0\n0 1 0 0 0\n0 0 1 0 0\n0 0 0 1 0';
 
 function makeEditor() {
-  return {
+  const ed = {
     stack: new Array(32).fill(null),
     stacki: 0,
     icons: {},
@@ -14,7 +14,9 @@ function makeEditor() {
     getusedlayers: vi.fn(),
     createfilter: vi.fn(),
     generatestackcanvas: vi.fn(),
+    changestacki: vi.fn(function (i) { ed.stacki = i; }),
   };
+  return ed;
 }
 
 function seedMatrixNodes() {
@@ -75,6 +77,11 @@ describe('refreshEditorView', () => {
     expect(ed.createfilter).toHaveBeenCalledTimes(2);
     expect(ed.createfilter).toHaveBeenCalledWith(0.2, 0.5, 0.9, 0.7);
     expect(ed.createfilter).toHaveBeenCalledWith(0.5, 0.2, 1, 1);
+    // changestacki must be called for each populated slot — this is what
+    // keeps the bottom-strip .selected CSS class in sync with stacki.
+    expect(ed.changestacki).toHaveBeenCalledTimes(2);
+    expect(ed.changestacki).toHaveBeenNthCalledWith(1, 3);
+    expect(ed.changestacki).toHaveBeenNthCalledWith(2, 9);
     expect(ed.stacki).toBe(9); // last slot visited
     expect(ed.draw).toHaveBeenCalledOnce();
     expect(ed.getusedlayers).toHaveBeenCalledOnce();
@@ -106,6 +113,10 @@ describe('refreshEditorView', () => {
     refreshEditorView();
 
     expect(ed.generatestackcanvas).toHaveBeenCalledTimes(1);
+    // changestacki is called so the .selected CSS class follows the cron's
+    // current stacki (otherwise the visual selection drifts after many ops).
+    expect(ed.changestacki).toHaveBeenCalledTimes(1);
+    expect(ed.changestacki).toHaveBeenCalledWith(1);
     expect(ed.stacki).toBe(1); // last slot visited
     // createfilter is called BEFORE generatestackcanvas so the re-paint
     // bakes the new filter into stack[i].canvas.

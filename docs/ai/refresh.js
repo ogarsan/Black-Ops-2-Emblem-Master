@@ -39,7 +39,7 @@ export function refreshEditorView() {
         //      that filter (used by the MAIN canvas via editor.draw())
         // If we paint first, stack[i].canvas is baked with the OLD
         // filter and the main canvas stays white where colors were added.
-        ed.stacki = i;
+        ed.changestacki?.(i);
         ed.createfilter?.(
           L.hue ?? 0,
           L.saturation ?? 0,
