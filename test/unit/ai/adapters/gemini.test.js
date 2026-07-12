@@ -37,6 +37,55 @@ describe('GeminiAdapter', () => {
     expect(events[0].type).toBe('error');
   });
 
+  it('captures thoughtSignature from a functionCall part (Gemini 3.x round-trip requirement)', async () => {
+    const body = JSON.stringify({
+      candidates: [{
+        content: {
+          parts: [{
+            functionCall: { name: 'get_emblem_state', args: {}, id: 'g1' },
+            thoughtSignature: 'sig-xyz',
+          }],
+          role: 'model',
+        },
+        finishReason: 'STOP',
+      }],
+    });
+    globalThis.fetch = vi.fn(async () => new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }));
+    const events = await collect(new GeminiAdapter().streamChat({ apiKey: 'AIza-x', model: 'gemini-3.5-flash', messages: [], tools: [], systemPrompt: '' }));
+    const tc = events.find((e) => e.type === 'tool_call');
+    expect(tc).toMatchObject({ type: 'tool_call', name: 'get_emblem_state', thoughtSignature: 'sig-xyz' });
+  });
+
+  it('maps an OpenAI-style assistant message with tool_calls to Gemini model+functionCall parts', async () => {
+    const fetch = vi.fn(async () => new Response('{"candidates":[]}', { status: 200, headers: { 'content-type': 'application/json' } }));
+    globalThis.fetch = fetch;
+    const iter = new GeminiAdapter().streamChat({
+      apiKey: 'AIza-x', model: 'gemini-3.5-flash',
+      messages: [
+        { role: 'user', content: 'add Letter A' },
+        { role: 'assistant', content: 'On it.', tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'add_layer', arguments: '{"name":"Letter A","position":1}' }, thoughtSignature: 'sig-c1' },
+        ] },
+        { role: 'tool', tool_call_id: 'c1', content: '{"ok":true,"result":{"inserted_at":1}}' },
+        { role: 'assistant', content: 'Done.' },
+      ],
+      tools: [], systemPrompt: 'sys',
+    });
+    for await (const _ of iter) {}
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.contents).toEqual([
+      { role: 'user', parts: [{ text: 'add Letter A' }] },
+      { role: 'model', parts: [
+        { text: 'On it.' },
+        { functionCall: { name: 'add_layer', args: { name: 'Letter A', position: 1 } }, thoughtSignature: 'sig-c1' },
+      ] },
+      // Tool result is sent as a 'user' turn with a functionResponse part
+      // (Gemini's wire format — see https://ai.google.dev/gemini-api/docs/function-calling).
+      { role: 'user', parts: [{ functionResponse: { name: 'add_layer', response: { ok: true, result: { inserted_at: 1 } } } }] },
+      { role: 'model', parts: [{ text: 'Done.' }] },
+    ]);
+  });
+
   it('lists supported models', () => {
     expect(GeminiAdapter.supportedModels).toContain('gemini-1.5-flash');
   });

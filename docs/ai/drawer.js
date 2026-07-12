@@ -12,8 +12,6 @@
 
 import { mountPanel } from './panel.js';
 
-const OPEN_KEY = 'bo2_ai_drawer_open_v1';
-
 export function mountDrawer({ settings, conversation }) {
   const root = document.createElement('div');
   root.className = 'bo2-ai-drawer';
@@ -33,10 +31,8 @@ export function mountDrawer({ settings, conversation }) {
   const panel = mountPanel(host, { settings, conversation });
 
   let open = false;
-  try { open = localStorage.getItem(OPEN_KEY) === '1'; } catch { /* ignore */ }
   const apply = () => {
     root.setAttribute('data-open', String(open));
-    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch { /* ignore */ }
   };
   const openDrawer = () => { open = true; apply(); panel.focusInput(); };
   const closeDrawer = () => { open = false; apply(); };

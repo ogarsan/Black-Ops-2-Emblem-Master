@@ -16,6 +16,8 @@ import { execTool, getToolDefinitions } from './tools/exec.js';
 import './tools/index.js'; // side-effect: registers all tools
 import { buildSystemPrompt } from './system_prompt.js';
 import { beforeSend } from './context_note.js';
+import { runAgentLoop } from './agent.js';
+import { refreshEditorView } from './refresh.js';
 import { currentState } from '../store.js';
 
 const ADAPTERS = {
@@ -34,10 +36,22 @@ const EMBLEM_CATALOG = (typeof globalThis.emblemdata === 'object' && globalThis.
 const drawer = mountDrawer({ settings: loadSettings(), conversation: loadConversation() });
 const panel = drawer.panel;
 
+// 3s safety-net cron: re-sync the editor's per-slot DOM (#layer-img-N,
+// #matrix-N) from the live stack. Most tool handlers refresh these
+// themselves on mutation; this catches anything we missed and any future
+// regressions. Idempotent and best-effort — see refresh.js.
+setInterval(refreshEditorView, 3000);
+
 let messages = loadConversation().slice();
 let streaming = null;
 let lastAiTurnSnapshot = null;
 let currentAbort = null;
+// Queue of messages the user typed while the agent was busy. The panel
+// cleared the textarea on Enter, so without queuing we lose these — the
+// user sees no bubble, no AI response to their typing. We append the user
+// bubble immediately (so they SEE that their input was accepted) and
+// drain the queue automatically when the current stream finishes.
+let pendingQueue = [];
 
 // Undo counter: subscribe once history exists (hooks.js ran first).
 window.__bo2History?.subscribe(({ canUndo, canRedo }) => panel.updateCounter({ canUndo, canRedo }));
@@ -58,16 +72,28 @@ drawer.root.addEventListener('bo2:abort', () => {
 });
 
 panel.onSend(async (text) => {
-  if (streaming) return;
   const s = loadSettings();
   if (!s.apiKey) {
     panel.showError('Set your API key in Settings (⚙) before sending.');
     return;
   }
 
+  // If the agent is busy, queue the message + show it as a pending bubble so
+  // the user SEES that their typing was accepted (the textarea is cleared on
+  // Enter, so without this they'd see nothing happen and no AI response).
+  if (streaming) {
+    pendingQueue.push(text);
+    panel.appendUser(text);
+    panel.showInfo?.('Queued — will send after current reply finishes.');
+    return;
+  }
+
   panel.appendUser(text);
   messages.push({ role: 'user', content: text });
+  await runOneTurn(text, s);
+});
 
+async function runOneTurn(_userText, s) {
   const assistantUpdater = panel.appendAssistant();
   const note = beforeSend({ lastAiTurnSnapshot, currentSnapshot: currentState() });
   const systemPrompt = buildSystemPrompt({ extra: note ?? '' });
@@ -81,40 +107,40 @@ panel.onSend(async (text) => {
     currentState,
     validEmblemNames: Object.values(EMBLEM_CATALOG).flat(),
   };
-
-  const textParts = [];
-  const toolCalls = [];
-  const toolResults = [];
+  const request = {
+    apiKey: s.apiKey,
+    model: s.model,
+    baseUrl: s.baseUrl,
+    tools: getToolDefinitions(),
+    systemPrompt,
+  };
 
   streaming = (async () => {
     currentAbort = new AbortController();
     try {
       panel.setStreaming(true);
-      for await (const ev of adapter.streamChat({
+      await runAgentLoop({
+        adapter,
+        request: { ...request, messages: truncateForRequest(messages) },
+        messages,
+        ctx,
         signal: currentAbort.signal,
-        apiKey: s.apiKey,
-        model: s.model,
-        baseUrl: s.baseUrl,
-        messages: truncateForRequest(messages),
-        tools: getToolDefinitions(),
-        systemPrompt,
-      })) {
-        if (ev.type === 'text') {
-          assistantUpdater(ev.delta);
-          textParts.push(ev.delta);
-        } else if (ev.type === 'tool_call') {
-          panel.appendToolCall({ id: ev.id, name: ev.name, args: ev.args });
-          toolCalls.push({ id: ev.id, type: 'function', function: { name: ev.name, arguments: JSON.stringify(ev.args) } });
-          const result = await execTool(ev.name, ev.args, ctx);
-          if (!result.ok) panel.markToolCallError(ev.id, result.error);
-          toolResults.push({ role: 'tool', tool_call_id: ev.id, content: JSON.stringify(result) });
-        } else if (ev.type === 'error') {
-          panel.showError(`Provider error: ${ev.error?.message ?? 'unknown'}`);
-        }
-      }
-      const assistantMsg = { role: 'assistant', content: textParts.join('') };
-      if (toolCalls.length) assistantMsg.tool_calls = toolCalls;
-      messages.push(assistantMsg, ...toolResults);
+        onEvent: (ev) => {
+          if (ev.type === 'text') {
+            assistantUpdater(ev.delta);
+          } else if (ev.type === 'tool_call') {
+            panel.appendToolCall({ id: ev.id, name: ev.name, args: ev.args });
+          } else if (ev.type === 'tool_result') {
+            if (!ev.result.ok) panel.markToolCallError(ev.id, ev.result.error);
+          } else if (ev.type === 'error') {
+            panel.showError(`Provider error: ${ev.error?.message ?? 'unknown'}`);
+          } else if (ev.type === 'retrying') {
+            panel.showInfo?.(ev.message);
+          } else if (ev.type === 'turn_failed') {
+            panel.showError(`Request failed: ${ev.error?.message ?? 'unknown'}`);
+          }
+        },
+      });
       saveConversation(messages);
       lastAiTurnSnapshot = currentState();
     } catch (err) {
@@ -123,6 +149,16 @@ panel.onSend(async (text) => {
       streaming = null;
       currentAbort = null;
       panel.setStreaming(false);
+      // Drain the queue: if the user typed more messages while we were
+      // streaming, send the next one. Order preserved; the rest stay queued.
+      if (pendingQueue.length) {
+        const next = pendingQueue.shift();
+        messages.push({ role: 'user', content: next });
+        // Recurse (not loop) so each turn's microtasks drain fully. No await
+        // here — the IIFE resolves, the UI is free, and the next turn
+        // starts asynchronously.
+        runOneTurn(next, s).catch((e) => panel.showError(String(e)));
+      }
     }
   })();
-});
+}

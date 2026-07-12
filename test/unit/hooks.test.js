@@ -172,3 +172,49 @@ describe('hooks.js undo — faithful restore', () => {
     expect(prevent).not.toHaveBeenCalled(); // native undo left alone
   });
 });
+
+describe('hooks.js — no stale onload eject', () => {
+  let ed;
+  beforeEach(() => {
+    localStorage.clear();
+    makeDom({ editorVisible: true });                 // creates #editor(visible), #bigemblem, #layer-img-*, #matrix-*
+    const bg = document.getElementById('bigemblem') || (() => {
+      const e = document.createElement('img'); e.id = 'bigemblem'; document.body.appendChild(e); return e;
+    })();
+    bg.onload = () => { throw new Error('stale onload must not survive a restore'); };
+    ({ ed } = makeEditor());
+    window.editor = ed;
+    window.details = { playername: 'P', playerclantag: '[C]', playerbg: '' };
+    window.updateimgs = () => {}; // no-op; the point is that hooks cleared onload first
+    delete window.__bo2ApplyState;
+  });
+
+  it('clears #bigemblem.onload before calling updateimgs during restore', async () => {
+    await loadHooksFresh();
+    window.__bo2ApplyState({ stack: new Array(32).fill(null), stacki: 0, details: {} });
+    expect(document.getElementById('bigemblem').onload).toBe(null);
+  });
+});
+
+describe('hooks.js — __bo2RefreshView', () => {
+  let ed;
+  beforeEach(() => {
+    localStorage.clear();
+    makeDom({ editorVisible: true });
+    ({ ed } = makeEditor());
+    window.editor = ed;
+    window.details = { playername: 'P', playerclantag: '[C]', playerbg: '' };
+    window.updateimgs = () => {};
+    delete window.__bo2RefreshView;
+  });
+
+  it('repaints layer previews from the live stack and redraws', async () => {
+    await loadHooksFresh();
+    ed.stack[3] = { name: 'Skull', img: { src: 'emblems/Skull.png' }, x: 150, y: 150, rotate: 0, hue: 0, saturation: 0, brightness: 1, alpha: 1, scalex: 1.15, scaley: 1.15 };
+    const drawSpy = vi.spyOn(ed, 'draw');
+    window.__bo2RefreshView();
+    expect(document.getElementById('layer-img-3').src).toMatch(/Skull\.png$/);
+    expect(document.getElementById('layer-img-0').src).toMatch(/empty\.png$/);
+    expect(drawSpy).toHaveBeenCalled();
+  });
+});

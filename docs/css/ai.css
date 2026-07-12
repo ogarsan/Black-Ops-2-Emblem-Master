@@ -115,6 +115,13 @@
   padding: 6px 8px;
   font-size: 14px;
 }
+.bo2-info-banner {
+  color: #fff;
+  background: #1a3a5a;
+  border: 2px solid #4a9eff;
+  padding: 6px 8px;
+  font-size: 14px;
+}
 
 .bo2-ai-inputrow { padding: 8px; border-top: 2px solid #555; }
 .bo2-ai-input {

@@ -49,7 +49,10 @@ export function registerAddLayer() {
     name: 'add_layer',
     definition: {
       description:
-        'Adds a new layer to the emblem at the given 1-indexed position (1..32). ' +
+        'Adds a new layer at the given position. **Position 1 = bottom ' +
+        '(background), position 32 = top (foreground); higher positions ' +
+        'cover lower ones.** Default: use a higher position for layers ' +
+        'that should sit on top (text labels, eyes, details). ' +
         'Use get_emblem_state first to find the next free position. ' +
         'Returns the inserted_at position and the name used.',
     },
@@ -85,16 +88,21 @@ export function registerAddLayer() {
       layer.ctx = layer.canvas.getContext('2d');
 
       ctx.editor.stack[idx] = layer;
-      ctx.editor.draw();
-      ctx.editor.getusedlayers();
+      // Mirror upstream's editor.addstack: set stacki to the affected slot
+      // and paint the layer's own canvas (so editor.draw() can composite it)
+      // and update its SVG color filter (so #layer-img-N preview shows colors).
+      // Without these, the layer is invisible on the main canvas and the
+      // bottom strip previews stay uncolored.
+      ctx.editor.stacki = idx;
+      ctx.editor.generatestackcanvas?.();
+      ctx.editor.createfilter?.(layer.hue, layer.saturation, layer.brightness, layer.alpha);
+      ctx.editor.draw?.();
+      ctx.editor.getusedlayers?.();
       window.updateimgs?.();
       // Mirror what upstream's icon.onclick does: refresh the per-layer preview
       // image so #layer-img-N shows the actual emblem, not img/empty.png.
       const previewImg = document.getElementById(`layer-img-${idx}`);
       if (previewImg && layer.img && layer.img.src) previewImg.src = layer.img.src;
-      // Update the SVG color filter for this layer (default identity matrix until
-      // user changes hue/sat/bri/alpha — this keeps the preview uncolored until
-      // update_layer runs).
       ctx.history?.snapshot(ctx.currentState?.());
 
       return { inserted_at: position, name };

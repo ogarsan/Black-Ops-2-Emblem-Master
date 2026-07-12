@@ -13,6 +13,12 @@ export function registerDeleteLayer() {
       const idx = position - 1;
       if (!ctx.editor.stack[idx]) return { error: `position ${position} is empty` };
       ctx.editor.stack[idx] = null;
+      // Reset the per-slot DOM so the bottom-strip preview doesn't keep
+      // showing the deleted layer's emblem and color filter.
+      const imgEl = document.getElementById(`layer-img-${idx}`);
+      if (imgEl) imgEl.src = 'img/empty.png';
+      const matrixEl = document.getElementById(`matrix-${idx}`);
+      if (matrixEl) matrixEl.setAttribute('values', '1 0 0 0 0\n0 1 0 0 0\n0 0 1 0 0\n0 0 0 1 0');
       ctx.editor.draw?.();
       ctx.editor.getusedlayers?.();
       window.updateimgs?.();

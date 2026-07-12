@@ -189,6 +189,19 @@ export function mountPanel(root, { settings, conversation }) {
     }
   }
 
+  // Non-fatal status banner (e.g. "Rate limited, retrying in 4s…"). Same shape
+  // as the error banner but visually distinct so the user knows we're still
+  // working, not failing.
+  function showInfo(msg) {
+    let banner = root.querySelector('.bo2-info-banner');
+    if (!banner) {
+      banner = el('div', 'bo2-info-banner', msg);
+      messages.prepend(banner);
+    } else {
+      banner.textContent = msg;
+    }
+  }
+
   function updateCounter({ canUndo, canRedo }) {
     const c = root.querySelector('.bo2-undo-counter');
     if (c) c.textContent = `↶ ${canUndo ? '1+' : '0'} / ↷ ${canRedo ? '1+' : '0'}`;
@@ -201,6 +214,7 @@ export function mountPanel(root, { settings, conversation }) {
     markToolCallError,
     setStreaming,
     showError,
+    showInfo,
     updateCounter,
     focusInput: () => input.focus(),
     getInputValue: () => input.value,

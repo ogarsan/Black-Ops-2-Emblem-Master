@@ -129,6 +129,10 @@ if (canvas) {
 
       ed.draw?.();
       ed.getusedlayers?.();
+      // Belt-and-suspenders: never let a stale "hide editor" onload (armed by the
+      // Escape-exit path) fire when updateimgs() reassigns #bigemblem.src.
+      const bg = document.getElementById('bigemblem');
+      if (bg) bg.onload = null;
       window.updateimgs?.();
       lastJson = JSON.stringify(state);
     } finally {
@@ -147,6 +151,34 @@ if (canvas) {
       e.preventDefault();
       window.__bo2ApplyState(hist.redo());
     }
+  });
+
+  // Deterministically make the previewer reflect the live stack. Called on editor
+  // entry (index.html only flips visibility; it never re-renders). Never changes
+  // editor/playercard visibility.
+  window.__bo2RefreshView = () => {
+    const ed = window.editor;
+    if (!ed) return;
+    const prev = document.getElementById('previews');
+    if (prev) prev.style.visibility = 'inherit';
+    const used = document.getElementById('usedlayers');
+    if (used) used.style.display = '';
+    for (let i = 0; i < 32; i++) {
+      const L = ed.stack[i];
+      const imgEl = document.getElementById(`layer-img-${i}`);
+      if (!imgEl) continue;
+      imgEl.src = (L && L.img && L.img.src) ? L.img.src : 'img/empty.png';
+    }
+    ed.draw?.();
+    ed.getusedlayers?.();
+  };
+
+  // Entering the editor (clicking the big/small emblem on the playercard) flips
+  // #editor visible via inline onclick; refresh right after so the previewer
+  // matches the stack. setTimeout(0) runs after the inline handler applied it.
+  ['bigemblem', 'smallemblem'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => setTimeout(() => window.__bo2RefreshView(), 0));
   });
 
   window.__bo2History = hist;

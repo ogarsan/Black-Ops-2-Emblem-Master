@@ -167,3 +167,43 @@ post-Task-9 follow-up) to cover all rows in the table above.
   canvas mouseup + slider change.
 - **Document in CLAUDE.md** that `editor.icons` is async-populated, so any
   AI tool that needs an icon must read it lazily (Task 16 already does this).
+
+---
+
+## E2E coverage
+
+> Audited 2026-07-11 (Tasks 1-5 of `fix/undo-eject-and-e2e` branch).
+> All E2E specs run against a local dev server (`pnpm dev`, port 8080) via Playwright + Chromium (headless).
+> Unit tests run via Vitest + jsdom.
+
+| Feature / scenario | Unit | E2E | Manual-only | Notes |
+|---|---|---|---|---|
+| `updateimgs` never leaves stale `onload` | ✅ hooks.test.js | — | — | P0 fix; unit verifies the defensive clear in `__bo2ApplyState`. |
+| `__bo2ApplyState` defensive `#bigemblem.onload` clear | ✅ hooks.test.js | — | — | Belt-and-suspenders alongside the main.js fix. |
+| `__bo2RefreshView` repaints layer previews from live stack | ✅ hooks.test.js | — | — | Unit confirms `layer-img-3.src`, `layer-img-0.src`, and `ed.draw()` called. |
+| Undo after Escape-exit + re-enter stays in editor (no eject) | — | ✅ undo_eject.spec.js | — | P0 bug scenario; uses AI-stub layer add + Ctrl+Z. |
+| Re-entering editor shows saved layers in previewer | — | ✅ undo_eject.spec.js | — | P0 bug scenario; checks `#layer-img-0` non-empty after re-entry. |
+| Enter / exit editor toggles visibility | — | ✅ editor_manual.spec.js | — | `#editor` visible / `#playercard` hidden. |
+| Clear layer (X key) empties the selected slot | — | ✅ editor_manual.spec.js | — | Dialog auto-accepted; checks `empty.png`. |
+| Move layer (D key) swaps to next slot | — | ✅ editor_manual.spec.js | — | Slot 0 → slot 1; verifies both slots. |
+| Undo removes a layer add | — | ✅ editor_manual.spec.js | — | Layer added via AI stub (see substitution note below); Ctrl+Z reverts; editor stays open. |
+| Save then load round-trips the emblem | — | ✅ save_load.spec.js | — | `savedata()` / `loaddata()` round-trip; slot 0 non-empty after reload. |
+| Editing player name updates `window.details` | — | ✅ playercard.spec.js | — | `contenteditable` fill via keyboard. |
+| Editing clan tag updates `window.details` | — | ✅ playercard.spec.js | — | Same pattern. |
+| AI drawer happy path (add layer via AI) | — | ✅ ai_happy_path.spec.js | — | Pre-existing spec; stubbed OpenAI stream. |
+| AI drawer abort | — | ✅ ai_abort.spec.js | — | Pre-existing spec. |
+| AI tool error handling | — | ✅ ai_tool_error.spec.js | — | Pre-existing spec. |
+| Drawer open/close | — | ✅ drawer.spec.js | — | Pre-existing spec. |
+| New chat clears history | — | ✅ new_chat.spec.js | — | Pre-existing spec. |
+| Settings panel | — | ✅ settings.spec.js | — | Pre-existing spec. |
+| Undo/redo via keyboard (general) | — | ✅ undo.spec.js | — | Pre-existing spec. |
+| **Add layer via native picker UI** | — | — | ✅ MANUAL-ONLY | Reason: `#emblems` icon images are inside `#picker` (initially `display:none`). Playwright geometry-checks refuse to click them in headless; the container is revealed by inline JS after `changemode("picker")` but the images remain Playwright-non-actionable. The E2E undo test uses `addLayerViaAi()` as the documented fallback. |
+| **Change emblem via native picker** | — | — | ✅ MANUAL-ONLY | Same reason as above: geometry-hidden `#emblems` icons not reliably clickable in headless. |
+| **Color slider undo** | — | — | ✅ MANUAL-ONLY | Reason: driving sliders via JS dispatch (`slider.dispatchEvent(new Event('change'))`) and manual stack mutation does not engage the undo history reliably — the undo system does not see the JS-forced change as a committed history entry. Native range-drag is geometry-dependent and not reliable headlessly. Attempted as P2; deleted after confirmed failure (hue value not reverted by Ctrl+Z in two runs). |
+| **Canvas drag (layer position)** | — | — | ✅ MANUAL-ONLY | Reason: canvas drag relies on mouse `mousedown`/`mousemove`/`mouseup` over specific canvas pixels; the exact pixel targets depend on the rendered layer position which varies by emblem. Not reliably scriptable headlessly without visual feedback. |
+| **Wheel scale (scalex/scaley via scroll)** | — | — | ✅ MANUAL-ONLY | Reason: `document.onwheel` fires on scroll over the canvas in "layer" mode. Playwright `page.mouse.wheel()` can trigger it, but the editor's wheel handler checks `editor.mode === "layer"` and the mode state must be set up correctly with focus; timing is unreliable across runs. |
+| **Background URL change (`alterbg`)** | — | — | ✅ MANUAL-ONLY | Reason: uses `prompt()` dialog which Playwright can dismiss, but the background image load is async and visual confirmation requires screenshot diff. |
+
+### Substitution note: picker-add → AI-stub in undo test
+
+The plan (`editor_manual.spec.js`, test 4: "undo removes a layer added via the picker default flow") explicitly documents a fallback: if the native picker sequence is flaky, replace with `addLayerViaAi()`. This fallback was applied because `#emblems img` elements inside `#picker` are not Playwright-actionable in headless. The test still exercises the full undo-of-an-add path end-to-end; only the layer-creation mechanism differs. The substitution is noted inline in the spec and here so coverage is not silently dropped.

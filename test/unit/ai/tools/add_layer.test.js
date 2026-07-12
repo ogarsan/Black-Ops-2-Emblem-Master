@@ -71,4 +71,31 @@ describe('add_layer', () => {
     expect(out.ok).toBe(false);
     expect(out.error).toMatch(/no image/i);
   });
+
+  // Regression: add_layer used to skip generatestackcanvas + createfilter,
+  // so editor.draw() drew a blank layer canvas and the #matrix-N color
+  // filter stayed at identity. Both calls are now required.
+  it('paints the layer canvas via editor.generatestackcanvas + sets the SVG filter via editor.createfilter', async () => {
+    const c = ctx();
+    c.editor.generatestackcanvas = vi.fn();
+    c.editor.createfilter = vi.fn();
+    await execTool('add_layer', { name: 'Letter A', position: 5, hue: 0.3, saturation: 0.7 }, c);
+    expect(c.editor.stacki).toBe(4); // set to the affected slot BEFORE paint
+    expect(c.editor.generatestackcanvas).toHaveBeenCalledOnce();
+    expect(c.editor.createfilter).toHaveBeenCalledOnce();
+    const [h, s, v, a] = c.editor.createfilter.mock.calls[0];
+    expect([h, s, v, a]).toEqual([0.3, 0.7, 1, 1]); // hue/sat from args, bri/alpha defaults
+  });
+
+  it('description teaches the model about z-order so it picks positions correctly', async () => {
+    // Read the registered tool definition directly from the registry to
+    // check the literal string the LLM sees (not just the source).
+    const { getToolDefinitions, resetRegistry } = await import('../../../../docs/ai/tools/exec.js');
+    resetRegistry();
+    registerAddLayer();
+    const defs = getToolDefinitions();
+    const desc = defs.find((d) => d.name === 'add_layer')?.description ?? '';
+    expect(desc).toMatch(/Position 1 = bottom/);
+    expect(desc).toMatch(/higher positions cover lower/);
+  });
 });

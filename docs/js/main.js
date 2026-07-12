@@ -57,7 +57,7 @@ function updateimgs(func) {
 	editor.canvas.toBlob(function(blob) {
 		canvasURL = URL.createObjectURL(blob);
 		const bigemblem = document.getElementById("bigemblem");
-		if(func) bigemblem.onload = func;
+		bigemblem.onload = func || null;
 		bigemblem.src = canvasURL;
 		document.getElementById("smallemblem").src = canvasURL;
 	});
