@@ -184,12 +184,44 @@ function messagesToGeminiContents(messages) {
     } else if (m.role === 'tool') {
       const name = idToName.get(m.tool_call_id);
       if (!name) continue;
-      let response = m.content;
-      try { response = JSON.parse(m.content ?? '{}'); } catch { /* keep raw */ }
-      contents.push({
-        role: 'user',
-        parts: [{ functionResponse: { name, response } }],
-      });
+      // Tool result content can be:
+      //   - legacy: a JSON string (parsed into Gemini's functionResponse.response)
+      //   - structured: an array of {type, ...} blocks (e.g. text + image_url
+      //     when the AI asked get_emblem_state for a screenshot)
+      // For structured content, build parts accordingly and merge the
+      // functionResponse metadata so Gemini still gets the response name.
+      let parts = [];
+      if (Array.isArray(m.content)) {
+        for (const block of m.content) {
+          if (block.type === 'text' && typeof block.text === 'string') {
+            parts.push({ text: block.text });
+          } else if (block.type === 'image_url' && block.image_url && typeof block.image_url.url === 'string') {
+            const url = block.image_url.url;
+            // Expect 'data:<mime>;base64,<data>'. Strip the prefix and pass
+            // base64 + mime to Gemini's inline_data.
+            const m2 = url.match(/^data:([^;]+);base64,(.*)$/);
+            if (m2) {
+              parts.push({ inline_data: { mime_type: m2[1], data: m2[2] } });
+            }
+          }
+        }
+        // Gemini requires a functionResponse part alongside any extras.
+        // Pull the text part (if any) as the `response` field so the model
+        // can still see the structured data even if multiple parts are sent.
+        // Keep the original text + inline_data parts too so multimodal
+        // Gemini models can SEE the canvas image.
+        const textPart = parts.find((p) => p.text);
+        let response = {};
+        if (textPart) {
+          try { response = JSON.parse(textPart.text); } catch { response = textPart.text; }
+        }
+        parts = [{ functionResponse: { name, response } }, ...parts];
+      } else {
+        let response = m.content;
+        try { response = JSON.parse(m.content ?? '{}'); } catch { /* keep raw */ }
+        parts = [{ functionResponse: { name, response } }];
+      }
+      contents.push({ role: 'user', parts });
     }
   }
   return contents;

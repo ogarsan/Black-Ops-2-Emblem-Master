@@ -89,4 +89,34 @@ describe('GeminiAdapter', () => {
   it('lists supported models', () => {
     expect(GeminiAdapter.supportedModels).toContain('gemini-1.5-flash');
   });
+
+  it('maps a tool message with image_url structured content to inline_data parts', async () => {
+    const fetch = vi.fn(async () => new Response(FIX('gemini_stream.txt'), { status: 200, headers: { 'content-type': 'application/json' } }));
+    globalThis.fetch = fetch;
+    const iter = new GeminiAdapter().streamChat({
+      apiKey: 'AIza-x', model: 'gemini-3.5-flash',
+      messages: [
+        { role: 'user', content: 'snap please' },
+        { role: 'assistant', content: '', tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'get_emblem_state', arguments: '{}' } },
+        ] },
+        { role: 'tool', tool_call_id: 'c1', content: [
+          { type: 'text', text: JSON.stringify({ layers_used: 0 }) },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,FAKE_BASE64' } },
+        ] },
+      ],
+      tools: [], systemPrompt: 'sys',
+    });
+    for await (const _ of iter) {}
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    const lastUserContent = body.contents[body.contents.length - 1];
+    expect(lastUserContent.role).toBe('user');
+    // Must include both a text part and an inline_data part (image).
+    const partTypes = lastUserContent.parts.map((p) => Object.keys(p)[0]);
+    expect(partTypes).toContain('text');
+    expect(partTypes).toContain('inline_data');
+    const inline = lastUserContent.parts.find((p) => p.inline_data);
+    expect(inline.inline_data.mime_type).toBe('image/png');
+    expect(inline.inline_data.data).toBe('FAKE_BASE64'); // data: URL prefix stripped
+  });
 });
