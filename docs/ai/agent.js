@@ -68,21 +68,18 @@ export async function runAgentLoop({
 }) {
   const tool = dispatch;
   let turns = 0;
-  // One-shot nudge: if the model emits a tool_call and then the very next
-  // turn is empty (no text, no tool_calls), it has "stopped replying". We
-  // inject a single nudge user message asking it to write a brief reply,
-  // so the user actually sees a final answer instead of just the tool
-  // result. One-shot per runAgentLoop call so we don't loop nudging.
-  let nudgedOnce = false;
 
   for (let depth = 0; depth < maxDepth; depth++) {
     turns += 1;
 
     // Nudge check: if the LAST assistant message had tool_calls AND no text
-    // content, the model "stopped replying" after the tool result. Fire a
-    // single nudge (one-shot) so the model gets a second chance to emit
-    // its final reply.
-    if (!nudgedOnce && depth > 0) {
+    // content, the model "stopped replying" after the tool result. Inject
+    // a synthetic user message asking it to write a brief reply before the
+    // next iteration. Fires on EVERY stuck iteration (not one-shot) because
+    // a chatty model that keeps calling tools without emitting text will
+    // otherwise exit silently with only the user's last bubble visible.
+    // maxDepth caps the absolute iteration count, so this can't loop forever.
+    if (depth > 0) {
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistant && lastAssistant.tool_calls?.length && !lastAssistant.content?.trim()) {
         messages.push({
@@ -92,7 +89,6 @@ export async function runAgentLoop({
             'Reply briefly about what you saw and whether the design matches the user\'s request. ' +
             'Do not call more tools — just emit one short sentence (e.g. "Done." or "Looks good.").',
         });
-        nudgedOnce = true;
       }
     }
 

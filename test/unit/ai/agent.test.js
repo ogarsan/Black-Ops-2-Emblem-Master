@@ -219,4 +219,31 @@ describe('runAgentLoop — nudge when model stops after a tool call', () => {
     const nudge = messages.find((m) => m.role === 'user' && m.content?.startsWith('[nudge]'));
     expect(nudge).toBeUndefined();
   });
+
+  // Regression: a one-shot nudge lets the model "stay stuck" on subsequent
+  // tool calls — every empty assistant turn after a tool call must get a
+  // fresh nudge (capped only by maxDepth). Otherwise a chatty model that
+  // keeps calling tools without emitting text will exit silently with the
+  // user's last user-message bubble visible and nothing else.
+  it('nudges on EVERY stuck iteration, not just the first', async () => {
+    // Three turns: each one emits a tool_call with no text. The model
+    // never replies — the loop should nudge before EACH turn and only exit
+    // when maxDepth is reached.
+    const adapter = scriptedAdapter([
+      [{ type: 'tool_call', id: 'c1', name: 'get_emblem_state', args: {} }],
+      [{ type: 'tool_call', id: 'c2', name: 'get_emblem_state', args: {} }],
+      [{ type: 'tool_call', id: 'c3', name: 'get_emblem_state', args: {} }],
+      [], // depth 3: empty, model is gone → exit
+    ]);
+    const messages = [{ role: 'user', content: 'q' }];
+    await runAgentLoop({
+      adapter, request: {}, messages, ctx: {},
+      execTool: async () => ({ ok: true, result: {} }),
+      onEvent: () => {}, maxDepth: 4,
+    });
+    const nudges = messages.filter((m) => m.role === 'user' && m.content?.startsWith('[nudge]'));
+    // 3 nudges — one before each tool-call turn (turns 2, 3, 4). Turn 1
+    // (depth 0) gets no nudge. Turn 4 is the empty exit.
+    expect(nudges.length).toBe(3);
+  });
 });
