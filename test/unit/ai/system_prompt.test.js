@@ -112,4 +112,18 @@ describe('buildSystemPrompt — catalog source priority', () => {
     expect(r).toMatch(/BAD:/);
     expect(r).toMatch(/GOOD:/);
   });
+
+  it('includes a Self-review section telling the model to verify size/order/color/shape', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toMatch(/## Self-review/);
+    // The four review axes the model must check.
+    expect(r).toMatch(/SIZE/);
+    expect(r).toMatch(/ORDER/);
+    expect(r).toMatch(/COLOR/);
+    expect(r).toMatch(/SHAPE/);
+    // Must explicitly tell the model to inspect via get_emblem_state before replying.
+    expect(r).toMatch(/get_emblem_state/);
+    expect(r).toMatch(/BEFORE writing your final reply/);
+  });
 });
