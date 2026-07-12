@@ -141,3 +141,43 @@ describe('runAgentLoop', () => {
     expect(events.find((e) => e.type === 'turn_failed')).toBeTruthy();
   });
 });
+
+describe('runAgentLoop — multimodal tool results', () => {
+  it('packages tool result with screenshot as structured content (text + image_url)', async () => {
+    const execTool = vi.fn(async (name) =>
+      name === 'capture'
+        ? { ok: true, result: { screenshot: 'data:image/png;base64,FAKE' } }
+        : { ok: true, result: {} }
+    );
+    const adapter = scriptedAdapter([
+      [{ type: 'tool_call', id: 'c1', name: 'capture', args: {} }],
+      [{ type: 'text', delta: 'done' }],
+    ]);
+    const messages = [{ role: 'user', content: 'snap' }];
+    await runAgentLoop({
+      adapter, request: {}, messages, ctx: {}, execTool, onEvent: () => {},
+    });
+    const lastToolMsg = [...messages].reverse().find((m) => m.role === 'tool');
+    expect(Array.isArray(lastToolMsg.content)).toBe(true);
+    expect(lastToolMsg.content).toContainEqual({ type: 'text', text: expect.any(String) });
+    expect(lastToolMsg.content).toContainEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,FAKE' },
+    });
+  });
+
+  it('keeps legacy JSON-string content for tool results without screenshot', async () => {
+    const execTool = vi.fn(async () => ({ ok: true, result: { layers_used: 0 } }));
+    const adapter = scriptedAdapter([
+      [{ type: 'tool_call', id: 'c1', name: 'no_screenshot', args: {} }],
+      [{ type: 'text', delta: 'ok' }],
+    ]);
+    const messages = [{ role: 'user', content: 'q' }];
+    await runAgentLoop({
+      adapter, request: {}, messages, ctx: {}, execTool, onEvent: () => {},
+    });
+    const lastToolMsg = [...messages].reverse().find((m) => m.role === 'tool');
+    expect(typeof lastToolMsg.content).toBe('string');
+    expect(lastToolMsg.content).toContain('layers_used');
+  });
+});
