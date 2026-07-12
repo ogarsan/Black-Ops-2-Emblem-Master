@@ -24,7 +24,7 @@ export class AnthropicAdapter extends AiAdapter {
       model,
       max_tokens: 4096,
       system: systemPrompt,
-      messages,
+      messages: convertOpenAIToAnthropic(messages),
       tools: (tools ?? []).map((t) => ({
         name: t.name,
         description: t.description,
@@ -119,4 +119,54 @@ export class AnthropicAdapter extends AiAdapter {
 
     yield { type: 'done' };
   }
+}
+
+/**
+ * Translate OpenAI-shape messages to Anthropic Messages API format.
+ * Specifically:
+ *   - role:'tool' messages become role:'user' messages with a single
+ *     `{type:'tool_result', tool_use_id, content:[...]}` block.
+ *     Content can be:
+ *       - a string (legacy) → wrapped in `{type:'text', text}`
+ *       - an array of text/image_url blocks → emitted as
+ *         `{type:'text'}` and `{type:'image', source:{type:'base64', ...}}`.
+ *   - All other messages pass through unchanged.
+ */
+function convertOpenAIToAnthropic(messages) {
+  const out = [];
+  for (const m of messages) {
+    if (m.role !== 'tool') {
+      out.push(m);
+      continue;
+    }
+    const inner = [];
+    if (Array.isArray(m.content)) {
+      for (const block of m.content) {
+        if (block.type === 'text' && typeof block.text === 'string') {
+          inner.push({ type: 'text', text: block.text });
+        } else if (block.type === 'image_url' && block.image_url && typeof block.image_url.url === 'string') {
+          const url = block.image_url.url;
+          const dm = url.match(/^data:([^;]+);base64,(.*)$/);
+          if (dm) {
+            inner.push({
+              type: 'image',
+              source: { type: 'base64', media_type: dm[1], data: dm[2] },
+            });
+          }
+        }
+      }
+    } else {
+      // Legacy: tool result was a JSON string of the result.
+      inner.push({ type: 'text', text: typeof m.content === 'string' ? m.content : '' });
+    }
+    out.push({
+      role: 'user',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: m.tool_call_id,
+        content: inner,
+      }],
+    });
+  }
+  return out;
 }
