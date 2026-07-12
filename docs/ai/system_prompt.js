@@ -60,6 +60,7 @@ export function buildSystemPrompt({ emblemData, backgrounds, extra } = {}) {
     '- After your last mutation in a turn, BEFORE writing your final reply, call get_emblem_state to inspect the live result.',
     '- Compare against the user\'s request on FOUR axes: SIZE (every layer fits on the 300×300 canvas; nothing clipped unnecessarily), ORDER (background at low positions, details/text on top — higher positions COVER lower), COLOR (each layer\'s hue/sat/bri/alpha matches the intent), SHAPE (each `name` is the intended emblem; if it doesn\'t exist in the catalog, say so and ask).',
     '- If something is off, fix it with update_layer / delete_layer / move_layer / add_layer. Do NOT redesign from scratch unless something is fundamentally broken.',
+    '- For visual verification, call `get_emblem_state({includeScreenshot: true})` and look at the returned image. Does the rendered emblem match the user\'s request on SIZE / ORDER / COLOR / SHAPE? If something is off, fix it with `update_layer` / `delete_layer` / `move_layer` / `add_layer`.',
     '- Only write your final reply ("Done." or "X layers added: …") once the emblem matches. Don\'t narrate this review.',
     '',
     '## Catalog',

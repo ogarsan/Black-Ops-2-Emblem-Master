@@ -125,5 +125,6 @@ describe('buildSystemPrompt — catalog source priority', () => {
     // Must explicitly tell the model to inspect via get_emblem_state before replying.
     expect(r).toMatch(/get_emblem_state/);
     expect(r).toMatch(/BEFORE writing your final reply/);
+    expect(r).toMatch(/includeScreenshot: true/); // tells the model how to ask for the canvas image
   });
 });
