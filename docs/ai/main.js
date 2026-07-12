@@ -17,6 +17,7 @@ import './tools/index.js'; // side-effect: registers all tools
 import { buildSystemPrompt } from './system_prompt.js';
 import { beforeSend } from './context_note.js';
 import { runAgentLoop } from './agent.js';
+import { refreshEditorView } from './refresh.js';
 import { currentState } from '../store.js';
 
 const ADAPTERS = {
@@ -34,6 +35,12 @@ const EMBLEM_CATALOG = (typeof globalThis.emblemdata === 'object' && globalThis.
 
 const drawer = mountDrawer({ settings: loadSettings(), conversation: loadConversation() });
 const panel = drawer.panel;
+
+// 3s safety-net cron: re-sync the editor's per-slot DOM (#layer-img-N,
+// #matrix-N) from the live stack. Most tool handlers refresh these
+// themselves on mutation; this catches anything we missed and any future
+// regressions. Idempotent and best-effort — see refresh.js.
+setInterval(refreshEditorView, 3000);
 
 let messages = loadConversation().slice();
 let streaming = null;
