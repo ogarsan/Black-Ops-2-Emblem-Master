@@ -11,6 +11,7 @@ import './add_layer.js';
 import './get_emblem_state.js';
 import './get_canvas_info.js';
 import './get_free_layers.js';
+import './get_layer.js';
 import './update_layer.js';
 import './delete_layer.js';
 import './move_layer.js';

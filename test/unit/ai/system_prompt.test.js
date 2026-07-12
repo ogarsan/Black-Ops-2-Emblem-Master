@@ -146,4 +146,19 @@ describe('buildSystemPrompt — catalog source priority', () => {
     const r = buildSystemPrompt({});
     expect(r).toMatch(/get_free_layers/);
   });
+
+  it('includes a "## Tool reference" section with per-tool guidance and mentions get_layer', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    // Section exists.
+    expect(r).toMatch(/## Tool reference/);
+    // Each tool mentioned with usage guidance.
+    for (const tool of ['get_free_layers', 'get_layer', 'get_emblem_state', 'add_layer', 'update_layer', 'delete_layer', 'move_layer']) {
+      expect(r).toMatch(new RegExp(tool));
+    }
+    // Specific guidance for the new get_layer tool.
+    expect(r).toMatch(/get_layer\(position\)/);
+    // The reference pairs get_layer with update_layer (the typical workflow).
+    expect(r).toMatch(/inspect current values first/);
+  });
 });
