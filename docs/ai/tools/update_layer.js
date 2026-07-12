@@ -34,9 +34,11 @@ export function registerUpdateLayer() {
       Object.assign(cur, patch);
       // Repaint the layer's own canvas + update its SVG color filter so the
       // main canvas and bottom-strip preview reflect the new properties.
+      // Order: createfilter first (sets #matrix-N), then generatestackcanvas
+      // (re-paints stack[i].canvas with that filter for the main canvas).
       ctx.editor.stacki = idx;
-      ctx.editor.generatestackcanvas?.();
       ctx.editor.createfilter?.(cur.hue, cur.saturation, cur.brightness, cur.alpha);
+      ctx.editor.generatestackcanvas?.();
       ctx.editor.draw?.();
       ctx.editor.getusedlayers?.();
       window.updateimgs?.();

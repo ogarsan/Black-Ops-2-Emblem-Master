@@ -4,18 +4,18 @@
 // position (0..31) it syncs:
 //   - #layer-img-N.src   ← stack[i].img.src (or img/empty.png when null)
 //   - #matrix-N values   ← createfilter(stack[i].hue, sat, bri, alpha)
+//   - stack[i].canvas    ← generatestackcanvas() so the MAIN canvas
+//                          shows colors too (the main canvas composites
+//                          stack[i].canvas; #matrix-N only affects the
+//                          per-layer preview). Without this, the cron
+//                          updates the bottom strip but the main canvas
+//                          stays white where it was first painted.
 // Then re-composites the main canvas, the layers-used counter, and the
 // playercard preview.
 //
 // Idempotent and best-effort: every DOM and editor call is null-guarded
 // and the whole body is wrapped in try/catch so the 3s setInterval
 // callback can never throw.
-//
-// Used by docs/ai/main.js as a 3s safety net for any case where a tool
-// handler forgot to refresh its per-slot DOM (the in-handler refresh
-// added in the add_layer / update_layer / move_layer / delete_layer /
-// clear_emblem commits is the primary mechanism; this is belt-and-
-// suspenders).
 
 const IDENTITY_VALUES = '1 0 0 0 0\n0 1 0 0 0\n0 0 1 0 0\n0 0 0 1 0';
 
@@ -33,7 +33,12 @@ export function refreshEditorView() {
         matrixEl.setAttribute('values', IDENTITY_VALUES);
       } else {
         imgEl.src = L.img.src;
-        // createfilter writes to #matrix-${stacki}; set stacki first.
+        // Order matters:
+        //   1. createfilter sets #matrix-${stacki} (used by bottom strip)
+        //   2. generatestackcanvas re-paints stack[stacki].canvas with
+        //      that filter (used by the MAIN canvas via editor.draw())
+        // If we paint first, stack[i].canvas is baked with the OLD
+        // filter and the main canvas stays white where colors were added.
         ed.stacki = i;
         ed.createfilter?.(
           L.hue ?? 0,
@@ -41,6 +46,7 @@ export function refreshEditorView() {
           L.brightness ?? 1,
           L.alpha ?? 1,
         );
+        ed.generatestackcanvas?.();
       }
     }
     ed.draw?.();

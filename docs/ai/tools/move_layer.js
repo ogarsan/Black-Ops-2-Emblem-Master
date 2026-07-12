@@ -28,10 +28,14 @@ export function registerMoveLayer() {
       //   - the #layer-img-N preview src is updated to the now-current emblem
       const repaint = (idx) => {
         ctx.editor.stacki = idx;
-        ctx.editor.generatestackcanvas?.();
+        // createfilter first (sets the SVG color filter), then
+        // generatestackcanvas re-paints stack[i].canvas with that filter
+        // for the main canvas. Wrong order bakes the OLD filter into the
+        // main canvas.
         const layer = ctx.editor.stack[idx];
         if (layer) {
           ctx.editor.createfilter?.(layer.hue, layer.saturation, layer.brightness, layer.alpha);
+          ctx.editor.generatestackcanvas?.();
           const previewImg = document.getElementById(`layer-img-${idx}`);
           if (previewImg && layer.img && layer.img.src) previewImg.src = layer.img.src;
         } else {
