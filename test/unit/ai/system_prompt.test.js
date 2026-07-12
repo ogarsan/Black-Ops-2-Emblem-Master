@@ -127,4 +127,23 @@ describe('buildSystemPrompt — catalog source priority', () => {
     expect(r).toMatch(/BEFORE writing your final reply/);
     expect(r).toMatch(/includeScreenshot: true/); // tells the model how to ask for the canvas image
   });
+
+  it('includes a Design philosophy section teaching cartoon-realism + stacking', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toMatch(/## Design philosophy/);
+    // Cartoon-realism + stacking guidance.
+    expect(r).toMatch(/cartoon-realism/);
+    expect(r).toMatch(/STACKING layers/);
+    // Recommends a meaningful layer count to discourage 3-layer sparse emblems.
+    expect(r).toMatch(/15/);
+    // Mentions get_free_layers so the model knows the tool exists.
+    expect(r).toMatch(/get_free_layers/);
+  });
+
+  it('lists get_free_layers in the ## Tools section', () => {
+    globalThis.__bo2Catalog = FIXTURE;
+    const r = buildSystemPrompt({});
+    expect(r).toMatch(/get_free_layers/);
+  });
 });
