@@ -49,7 +49,10 @@ export function registerAddLayer() {
     name: 'add_layer',
     definition: {
       description:
-        'Adds a new layer to the emblem at the given 1-indexed position (1..32). ' +
+        'Adds a new layer at the given position. **Position 1 = bottom ' +
+        '(background), position 32 = top (foreground); higher positions ' +
+        'cover lower ones.** Default: use a higher position for layers ' +
+        'that should sit on top (text labels, eyes, details). ' +
         'Use get_emblem_state first to find the next free position. ' +
         'Returns the inserted_at position and the name used.',
     },

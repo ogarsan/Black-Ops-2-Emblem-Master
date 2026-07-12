@@ -86,4 +86,16 @@ describe('add_layer', () => {
     const [h, s, v, a] = c.editor.createfilter.mock.calls[0];
     expect([h, s, v, a]).toEqual([0.3, 0.7, 1, 1]); // hue/sat from args, bri/alpha defaults
   });
+
+  it('description teaches the model about z-order so it picks positions correctly', async () => {
+    // Read the registered tool definition directly from the registry to
+    // check the literal string the LLM sees (not just the source).
+    const { getToolDefinitions, resetRegistry } = await import('../../../../docs/ai/tools/exec.js');
+    resetRegistry();
+    registerAddLayer();
+    const defs = getToolDefinitions();
+    const desc = defs.find((d) => d.name === 'add_layer')?.description ?? '';
+    expect(desc).toMatch(/Position 1 = bottom/);
+    expect(desc).toMatch(/higher positions cover lower/);
+  });
 });
