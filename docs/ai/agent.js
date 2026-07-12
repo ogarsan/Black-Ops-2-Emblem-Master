@@ -113,22 +113,28 @@ export async function runAgentLoop({
           onEvent({ type: 'tool_result', id: ev.id, name: ev.name, result });
           // Build the tool result message. If the tool returned a `screenshot`,
           // attach it as image content so multimodal providers can SEE the canvas
-          // (not just the structured data). Adapters that don't support
-          // multimodal tool content fall back gracefully (OpenAI/Anthropic
-          // accept arrays natively; Gemini is updated separately to translate).
-          const payload = result && typeof result === 'object' ? { ...result } : { value: result };
-          const inner = payload.result;
-          const screenshot = inner && typeof inner === 'object' ? inner.screenshot : undefined;
+          // (not just the structured data). For the legacy (no-screenshot)
+          // path we preserve the pre-existing wire format: stringify the
+          // result envelope (`{ok, result}`) directly — primitives pass through
+          // unwrapped so a tool that returns `"done"` stays `"done"`.
+          const screenshot = result
+            && typeof result === 'object'
+            && typeof result.result === 'object'
+            && typeof result.result.screenshot === 'string'
+              ? result.result.screenshot
+              : undefined;
           let content;
           if (screenshot) {
-            const textPayload = { ...inner };
+            // Strip the screenshot from the text payload so we don't send the
+            // base64 twice (once in text, once in image_url).
+            const textPayload = { ...result.result };
             delete textPayload.screenshot;
             content = [
               { type: 'text', text: JSON.stringify(textPayload) },
               { type: 'image_url', image_url: { url: screenshot } },
             ];
           } else {
-            content = JSON.stringify(payload);
+            content = JSON.stringify(result);
           }
           toolResults.push({
             role: 'tool',

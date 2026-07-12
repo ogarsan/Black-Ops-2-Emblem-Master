@@ -111,9 +111,18 @@ describe('GeminiAdapter', () => {
     const body = JSON.parse(fetch.mock.calls[0][1].body);
     const lastUserContent = body.contents[body.contents.length - 1];
     expect(lastUserContent.role).toBe('user');
-    // Must include both a text part and an inline_data part (image).
+    // 'text' is now inside the functionResponse's response field (the
+    // model's structured data), while inline_data is a separate part.
+    const fnPart = lastUserContent.parts.find((p) => p.functionResponse);
+    expect(fnPart).toBeTruthy();
+    // The response field contains the structured data — text fields live in
+    // a 'text' sub-property when the tool result was JSON, or as the
+    // response itself when it wasn't.
+    const responseStr = typeof fnPart.functionResponse.response === 'string'
+      ? fnPart.functionResponse.response
+      : JSON.stringify(fnPart.functionResponse.response);
+    expect(responseStr).toContain('layers_used');
     const partTypes = lastUserContent.parts.map((p) => Object.keys(p)[0]);
-    expect(partTypes).toContain('text');
     expect(partTypes).toContain('inline_data');
     const inline = lastUserContent.parts.find((p) => p.inline_data);
     expect(inline.inline_data.mime_type).toBe('image/png');

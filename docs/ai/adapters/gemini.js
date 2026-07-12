@@ -208,14 +208,17 @@ function messagesToGeminiContents(messages) {
         // Gemini requires a functionResponse part alongside any extras.
         // Pull the text part (if any) as the `response` field so the model
         // can still see the structured data even if multiple parts are sent.
-        // Keep the original text + inline_data parts too so multimodal
-        // Gemini models can SEE the canvas image.
-        const textPart = parts.find((p) => p.text);
+        // Keep the inline_data part (image) but STRIP the text part from the
+        // array so we don't send the same text twice — once as a {text} block
+        // and once inside functionResponse.response. Multimodal Gemini models
+        // can still SEE the canvas via the inline_data block.
+        const textPart = parts.find((p) => 'text' in p);
         let response = {};
         if (textPart) {
           try { response = JSON.parse(textPart.text); } catch { response = textPart.text; }
         }
-        parts = [{ functionResponse: { name, response } }, ...parts];
+        const nonTextParts = parts.filter((p) => !('text' in p));
+        parts = [{ functionResponse: { name, response } }, ...nonTextParts];
       } else {
         let response = m.content;
         try { response = JSON.parse(m.content ?? '{}'); } catch { /* keep raw */ }
