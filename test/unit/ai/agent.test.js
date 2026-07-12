@@ -181,3 +181,42 @@ describe('runAgentLoop — multimodal tool results', () => {
     expect(lastToolMsg.content).toContain('layers_used');
   });
 });
+
+describe('runAgentLoop — nudge when model stops after a tool call', () => {
+  it('injects a one-shot [nudge] user message when the previous turn was a tool call with empty content', async () => {
+    // Turn 1: model emits a tool_call (no text). Turn 2: model emits nothing.
+    // The agent loop should detect the stuck state, inject a nudge before
+    // turn 2 completes, and exit.
+    const adapter = scriptedAdapter([
+      [{ type: 'tool_call', id: 'c1', name: 'get_emblem_state', args: { includeScreenshot: true } }],
+      // Empty turn — model produces no events.
+      [],
+    ]);
+    const messages = [{ role: 'user', content: 'make a monkey' }];
+    await runAgentLoop({
+      adapter, request: {}, messages, ctx: {}, execTool: async () => ({ ok: true, result: {} }),
+      onEvent: () => {},
+    });
+    // The nudge must appear as a user-role message somewhere in history.
+    const nudge = messages.find((m) => m.role === 'user' && m.content.startsWith('[nudge]'));
+    expect(nudge).toBeTruthy();
+    expect(nudge.content).toMatch(/Reply briefly/);
+    // And the agent loop should still have exited cleanly (not looped forever).
+    // No further tool_calls beyond the original one.
+    const toolCallsTotal = messages.filter((m) => m.role === 'tool').length;
+    expect(toolCallsTotal).toBe(1);
+  });
+
+  it('does NOT nudge on the first iteration (depth === 0)', async () => {
+    const adapter = scriptedAdapter([
+      [{ type: 'text', delta: 'hi' }],
+    ]);
+    const messages = [{ role: 'user', content: 'q' }];
+    await runAgentLoop({
+      adapter, request: {}, messages, ctx: {}, execTool: async () => ({ ok: true }),
+      onEvent: () => {},
+    });
+    const nudge = messages.find((m) => m.role === 'user' && m.content?.startsWith('[nudge]'));
+    expect(nudge).toBeUndefined();
+  });
+});
